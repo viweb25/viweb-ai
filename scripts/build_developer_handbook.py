@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs/handbook"
-REPO = "https://github.com/viweb25/vi-websync-ai.git"
+REPO = "https://github.com/viweb25/viweb-ai.git"
 SKIP = {
     ".git",
     ".agents",

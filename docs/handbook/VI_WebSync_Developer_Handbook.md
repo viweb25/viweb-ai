@@ -8,9 +8,9 @@ Prepared for Siva, Hemachandran and Akash · 2026-11-13
 
 Account supplied by Siva: https://github.com/viweb25
 
-Intended private repository: https://github.com/viweb25/vi-websync-ai.git
+Repository supplied by Siva: https://github.com/viweb25/viweb-ai.git
 
-The repository name is the working choice from the development plan. This PDF does not prove the GitHub repository exists or that a push succeeded. Creation/push requires Siva's authenticated GitHub connection; final push status must be checked separately. Do not paste access tokens into chats, source files or Git remote URLs.
+Siva created viweb25/viweb-ai. This PDF does not prove a push succeeded or establish repository visibility. Pushing requires authenticated GitHub access; check final push status separately. Do not paste access tokens into chats, source files or Git remote URLs.
 
 The supplied workspace has an unusable read-only .git directory. Its environment metadata is left untouched. A separate clean export can hold normal Git history for publication; future developers should clone the actual GitHub repository.
 
@@ -46,7 +46,7 @@ make --version
 
 ## 4. Siva: initial GitHub publication
 
-Create a private repository named vi-websync-ai under viweb25 if it does not exist. For a new empty remote, do not pre-create a README, .gitignore or licence: those files already exist here. Invite Hemachandran and Akash using their actual GitHub accounts.
+Siva has created viweb25/viweb-ai. Use this existing repository; do not create a second one. Invite Hemachandran and Akash using their actual GitHub accounts. Confirm repository visibility in GitHub settings.
 
 If using GitHub CLI on your own machine, authenticate with its browser flow. Do not enter secrets in this document. The following commands are for a normal writable Git checkout/export, NOT the supplied read-only .git folder:
 
@@ -57,7 +57,10 @@ git add .
 git diff --cached --stat
 git status --short
 git commit -m "chore(T003): add platform foundation and developer handbook"
-gh repo create viweb25/vi-websync-ai --private --source=. --remote=origin --push
+git remote add origin https://github.com/viweb25/viweb-ai.git
+git ls-remote origin
+# If the remote has no branches, publish the initial commit:
+git push -u origin main
 git branch develop
 git push -u origin develop
 ```
@@ -68,11 +71,11 @@ After publication, check GitHub Actions; replace commented CODEOWNERS entries wi
 
 ## 5. Every developer: clone from GitHub
 
-First accept Siva's repository invitation. Copy the actual clone URL from GitHub's Code menu. The intended URL below becomes usable only after the private repository is created and your account has access.
+First accept Siva's repository invitation. Copy the actual clone URL from GitHub's Code menu. Use the actual repository URL below; a private repository also requires collaborator access.
 
 ```bash
-git clone https://github.com/viweb25/vi-websync-ai.git
-cd vi-websync-ai
+git clone https://github.com/viweb25/viweb-ai.git
+cd viweb-ai
 git remote -v
 git fetch origin
 ```
