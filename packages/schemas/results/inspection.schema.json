@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.viwebsync.local/results/v1",
+  "title": "Inspection result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "result_id",
+    "org_id",
+    "project_id",
+    "function_id",
+    "model_version",
+    "configuration_version",
+    "sequence",
+    "timestamp",
+    "execution_status",
+    "decision",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "result_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "org_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "function_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "configuration_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "execution_status": {
+      "enum": [
+        "succeeded",
+        "error",
+        "timeout"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "HOLD",
+        "REINSPECT"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "latency_ms": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "execution_status": {
+            "enum": [
+              "error",
+              "timeout"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "decision": {
+            "const": "HOLD"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vi-websync/jobs/job/v1",
+  "title": "Worker job",
+  "type": "object",
+  "required": ["id", "type", "status", "input"],
+  "properties": {
+    "id": { "type": "string" },
+    "org_id": { "type": "string" },
+    "type": { "enum": ["preview_detect", "import_zip", "quality", "prelabel", "train", "evaluate", "export"] },
+    "needs_gpu": { "type": "boolean" },
+    "status": { "enum": ["queued", "running", "succeeded", "failed", "cancelled"] },
+    "input": { "type": "object" },
+    "progress": { "type": "object", "properties": { "percent": { "type": "number" }, "message": { "type": "string" } } },
+    "result": { "type": ["object", "null"] },
+    "error": { "type": ["string", "null"] }
+  }
+}

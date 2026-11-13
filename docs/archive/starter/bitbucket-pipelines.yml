@@ -1,0 +1,54 @@
+image: python:3.11
+definitions:
+  caches:
+    uv: ~/.cache/uv
+  steps:
+    - step: &test-python
+        name: Backend + AI + edge - lint and test
+        condition: { changesets: { includePaths: ["backend/**", "packages/**", "services/**", "edge/**", "contracts/**"] } }
+        caches: [uv]
+        services: [postgres]
+        script:
+          - pip install uv && uv sync --all-packages
+          - uv run ruff check .
+          - cd backend && uv run pytest -q && cd ..
+          - uv run pytest -q packages/vi_ml services/worker edge
+    - step: &test-web
+        name: Web - lint, test, build
+        image: node:22
+        condition: { changesets: { includePaths: ["apps/web/**", "contracts/**"] } }
+        caches: [node]
+        script:
+          - corepack enable && pnpm install --frozen-lockfile
+          - pnpm --filter web lint && pnpm --filter web test && pnpm --filter web build
+    - step: &deploy-staging
+        name: Deploy STAGING
+        image: mcr.microsoft.com/azure-cli
+        services: [docker]
+        script:
+          - ./infra/scripts/deploy.sh staging $BITBUCKET_COMMIT
+  services:
+    postgres:
+      image: postgres:16
+      variables: { POSTGRES_USER: vi, POSTGRES_PASSWORD: vi, POSTGRES_DB: viws_test }
+pipelines:
+  pull-requests:
+    "**":
+      - parallel:
+          - step: *test-python
+          - step: *test-web
+  branches:
+    main:
+      - parallel:
+          - step: *test-python
+          - step: *test-web
+      - step: *deploy-staging
+  tags:
+    "v*":
+      - step:
+          name: Deploy PRODUCTION
+          trigger: manual
+          image: mcr.microsoft.com/azure-cli
+          services: [docker]
+          script:
+            - ./infra/scripts/deploy.sh production $BITBUCKET_TAG

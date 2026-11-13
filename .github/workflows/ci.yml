@@ -1,0 +1,49 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.7.13"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      - run: uv run python scripts/export_openapi.py --check
+        env:
+          PYTHONPATH: services/api
+      - run: uv run alembic -c services/api/alembic.ini upgrade head
+        env:
+          PYTHONPATH: services/api
+          DATABASE_URL: postgresql+asyncpg://vi:vi_local@127.0.0.1:5432/viws
+    services:
+      postgres:
+        image: postgres:16.8-alpine
+        env:
+          POSTGRES_USER: vi
+          POSTGRES_PASSWORD: vi_local
+          POSTGRES_DB: viws
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vi -d viws"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build

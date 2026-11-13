@@ -1,0 +1,71 @@
+task_id,phase,start_week,planned_start,task,owner,estimated_person_days,depends_on,priority,done_when,source_status
+T001,0 Setup,1,2026-11-16,Create private GitHub organisation and repository vi-websync-ai,All,0.5,-,High,Repo exists; all three members have access,Not started
+T002,0 Setup,1,2026-11-16,Protect main and develop branches; require one PR approval,Siva,0.5,T001,High,Direct pushes to main are blocked,Not started
+T003,0 Setup,1,2026-11-16,"Create monorepo folders, root README, .gitignore, CONTRIBUTING.md",Siva,1,T001,High,Folders match documentation section 7,Not started
+T004,0 Setup,1,2026-11-16,"Docker Compose stack: PostgreSQL, Redis, MinIO, MLflow",Siva,2,T003,High,docker compose up starts all four services,Not started
+T005,0 Setup,1,2026-11-16,GitHub Actions CI: lint and tests on every pull request,Siva,1,T003,High,Failing tests block merge,Not started
+T006,0 Setup,1,2026-11-16,"Set up Python 3.11, CUDA and PyTorch on the development workstation",Akash,1,-,High,torch.cuda.is_available() returns True,Not started
+T007,0 Setup,1,2026-11-16,"Scaffold React, TypeScript, Vite and Tailwind app",Hemachandran,1,T003,High,npm run dev shows the app shell,Not started
+T008,0 Setup,1,2026-11-16,"Agree coding standards: Ruff/Black, ESLint/Prettier, commit style",All,1,T003,Medium,Standards file merged to develop,Not started
+T009,0 Setup,1,2026-11-16,Kick-off: walk through blueprint and architecture document; confirm ownership,All,1,-,High,Team Sheet signed off,Not started
+T010,1 Core platform,2,2026-11-23,"Write OpenAPI spec for auth, projects, assets and classes",Siva,2,T003,High,Spec reviewed and merged,Not started
+T011,1 Core platform,2,2026-11-23,"Write JSON Schemas: function config, function template, standard result",Akash,2,T003,High,Schemas validate sample documents,Not started
+T012,1 Core platform,2,2026-11-23,"Login, JWT tokens, roles and permissions (Keycloak or Auth0)",Siva,4,T010,High,Roles from blueprint section 13 enforced,Not started
+T013,1 Core platform,2,2026-11-23,Database schema and Alembic migrations for core tables,Siva,4,T004,High,Migrations run up and down cleanly,Not started
+T014,1 Core platform,3,2026-11-30,Projects and assets REST endpoints,Siva,3,T013,High,Contract tests pass,Not started
+T015,1 Core platform,3,2026-11-30,Function template engine: load templates from schema files,Siva,3,T011,High,Template endpoint returns the MVP templates,Not started
+T016,1 Core platform,2,2026-11-23,"App shell, login page and navigation menu",Hemachandran,3,T007,High,Menu matches blueprint section 8.1,Not started
+T017,1 Core platform,3,2026-11-30,Projects list and create-project form,Hemachandran,3,T014,High,New project appears in list,Not started
+T018,1 Core platform,4,2026-12-07,"Asset management screens: cameras, PLCs, sensors",Hemachandran,3,T014,Medium,"Asset create, edit and delete work",Not started
+T019,1 Core platform,4,2026-12-07,Function library and function creation screen (form built from schema),Hemachandran,4,T015,High,Form fields generated from template,Not started
+T020,1 Core platform,4,2026-12-07,Object storage uploads using presigned URLs,Siva,2,T004,High,Uploaded image stored under project prefix,Not started
+T021,1 Core platform,4,2026-12-07,Class management API with versioning,Siva,2,T014,High,Classes CRUD with versions,Not started
+T022,1 Core platform,4,2026-12-07,Class management UI,Hemachandran,2,T021,Medium,Classes can be added and edited,Not started
+T023,1 Core platform,5,2026-12-14,Audit log for critical changes,Siva,2,T013,Medium,Configuration changes write audit rows,Not started
+T024,1 Core platform,6,2026-12-21,Phase 1 integration test and demo,All,2,"T014,T016,T017",High,"Demo: login, create project, add asset",Not started
+T030,2 Core vision functions,7,2026-12-28,"Function package format: manifest, schema, golden images, tests",Akash,2,T011,High,Package layout documented; sample package exists,Not started
+T031,2 Core vision functions,7,2026-12-28,"Inference runtime: load package, predict and health endpoints",Akash,5,T030,High,Runtime returns standard result for sample package,Not started
+T032,2 Core vision functions,8,2027-01-04,Golden image test harness,Akash,2,T031,High,Harness fails when output differs from expected,Not started
+T033,2 Core vision functions,8,2027-01-04,"Object Detection package: train base, export ONNX, verify",Akash,4,T031,High,ONNX output matches PyTorch within tolerance,Not started
+T034,2 Core vision functions,9,2027-01-11,Image Classification package,Akash,3,T031,High,Passes golden tests,Not started
+T035,2 Core vision functions,9,2027-01-11,Anomaly Detection package,Akash,4,T031,High,Passes golden tests; false-positive rate reported,Not started
+T036,2 Core vision functions,7,2026-12-28,Annotation Studio: bounding boxes and polygons on canvas,Hemachandran,8,T020,High,"Boxes drawn, edited and saved",Not started
+T037,2 Core vision functions,8,2027-01-04,Annotation save and load API,Siva,3,T020,High,Annotations reopen exactly as saved,Not started
+T038,2 Core vision functions,9,2027-01-11,"Dataset manager UI: upload, folders, split settings",Hemachandran,5,T020,High,Upload shows counts per split,Not started
+T039,2 Core vision functions,9,2027-01-11,"Dataset quality checks API: duplicates, corrupt files, class balance",Siva,3,T020,Medium,Quality summary endpoint returns results,Not started
+T040,2 Core vision functions,9,2027-01-11,Training job API and Celery queue,Siva,4,T013,High,"Job created, queued and status readable",Not started
+T041,2 Core vision functions,10,2027-01-18,Fine-tuning pipeline with MLflow logging,Akash,6,"T033,T040",High,Job produces checkpoint and metrics,Not started
+T042,2 Core vision functions,11,2027-01-25,Model registry API and versioning,Siva,3,T041,High,Versions linked to parent release and dataset,Not started
+T043,2 Core vision functions,11,2027-01-25,Training monitor UI with live progress over WebSocket,Hemachandran,5,T040,High,Epoch progress updates in browser,Not started
+T044,2 Core vision functions,11,2027-01-25,Test-on-image API endpoint,Siva,2,T031,High,Returns standard result for uploaded image,Not started
+T045,2 Core vision functions,12,2027-02-01,Test-on-image UI with result overlay,Hemachandran,2,T044,High,Result box and status shown on image,Not started
+T046,2 Core vision functions,12,2027-02-01,Promotion rule: compare candidate with release on held-out test set,Akash,2,T041,High,Candidate blocked when worse than release,Not started
+T047,2 Core vision functions,13,2027-02-08,Model approval workflow and registry UI,Hemachandran,3,T042,High,Approval writes audit entry,Not started
+T048,2 Core vision functions,14,2027-02-15,Phase 2 integration test and demo,All,2,"T045,T047",High,"Demo: teach, train, test, approve",Not started
+T050,3 Industrial AI functions,15,2027-02-22,Assembly Verification package,Akash,5,T035,High,Missing or misplaced part detected on golden set,Not started
+T051,3 Industrial AI functions,15,2027-02-22,OCR and Label Inspection package,Akash,5,T031,High,Read rate reported for batch and expiry text,Not started
+T052,3 Industrial AI functions,16,2027-03-01,Object Counting package with counting line and tracking,Akash,3,T033,Medium,Count matches manual count on test video,Not started
+T053,3 Industrial AI functions,16,2027-03-01,Dimension Measurement: calibration and geometric fitting,Akash,6,T031,High,Within stated uncertainty against gauge block,Not started
+T054,3 Industrial AI functions,17,2027-03-08,Predictive Maintenance prototype (time-series),Akash,6,T013,Medium,Health score produced from sample sensor data,Not started
+T055,3 Industrial AI functions,16,2027-03-01,Function-specific wizard sections,Hemachandran,5,T019,High,Wizard matches blueprint section 8.3,Not started
+T056,3 Industrial AI functions,17,2027-03-08,Result views for counting and OCR,Hemachandran,3,T045,Medium,Counts and read text shown per item,Not started
+T057,3 Industrial AI functions,19,2027-03-22,Phase 3 integration test and demo,All,2,"T050,T051,T053",High,All three functions run through test-on-image,Not started
+T060,4 Industrial integration,20,2027-03-29,Edge agent skeleton with device-certificate authentication,Siva,4,T012,High,Agent connects over TLS and sends heartbeat,Not started
+T061,4 Industrial integration,20,2027-03-29,Camera adapter (Basler pylon or GenICam),Akash,6,T031,High,Frame captured on trigger,Not started
+T062,4 Industrial integration,21,2027-04-05,PLC adapter: Siemens S7 via snap7,Akash,4,T060,High,Read and write test tag on S7-1200,Not started
+T063,4 Industrial integration,22,2027-04-12,"Rule engine: IF/ELSE, PASS, FAIL, REINSPECT, HOLD",Siva,5,T013,High,Rules from blueprint section 11 pass tests,Not started
+T064,4 Industrial integration,22,2027-04-12,Local offline queue and cloud sync,Siva,4,T060,High,Results survive network loss and sync later,Not started
+T065,4 Industrial integration,22,2027-04-12,Live monitoring dashboard over WebSocket,Hemachandran,5,T063,High,Counts and alarms update live,Not started
+T066,4 Industrial integration,23,2027-04-19,Modbus TCP and OPC UA adapters,Akash,5,T060,Medium,Test points read on each protocol,Not started
+T067,4 Industrial integration,23,2027-04-19,"LabVIEW integration library: VIs for inference, result, PLC trigger",Akash,6,T060,High,LabVIEW test VI receives PASS from edge agent,Not started
+T068,4 Industrial integration,24,2027-04-26,Reports API (PDF and CSV export),Siva,3,T063,Medium,Export contains inspection history,Not started
+T069,4 Industrial integration,24,2027-04-26,Reports screens and download,Hemachandran,3,T068,Medium,Report downloads from UI,Not started
+T070,4 Industrial integration,25,2027-05-03,Phase 4 integration test on test bench,All,3,"T062,T063,T067",High,Trigger to inspection to PLC output within agreed time,Not started
+T080,5 Release,26,2027-05-10,"Model packaging, signing and weight encryption",Akash,4,T046,High,Edge verifies package signature,Not started
+T081,5 Release,26,2027-05-10,Machine-bound licence service and offline activation,Siva,5,T012,High,Licence works offline with activation file,Not started
+T082,5 Release,27,2027-05-17,Deployment and rollback UI,Hemachandran,3,T047,High,Rollback restores previous approved model,Not started
+T083,5 Release,27,2027-05-17,Security hardening checklist and review,Siva,3,T012,High,All checklist items signed off,Not started
+T084,5 Release,28,2027-05-24,Windows installer and Docker packaging,Siva,4,T070,High,Clean install on a fresh Windows PC,Not started
+T085,5 Release,28,2027-05-24,User manual and admin guide,Hemachandran,4,T082,Medium,Manual covers every screen,Not started
+T086,5 Release,29,2027-05-31,Acceptance tests on customer-like hardware,All,5,T084,High,Acceptance table fully passed,Not started
+T087,5 Release,30,2027-06-07,Pilot site deployment and handover,All,5,T086,High,Pilot runs for the agreed period,Not started
