@@ -74,7 +74,8 @@ configuration version, sequence and device identity with every production result
 ## Contract policy
 
 packages/schemas contains the public wire contracts. api.json is the checked-in OpenAPI
-snapshot generated from FastAPI's typed definitions. `make contracts` fails on drift.
+snapshot generated from FastAPI's typed definitions. inference.json covers the separate
+AI service, including its current model-unavailable contract. `make contracts` fails on drift.
 At feature design time, review the contract before merging consumers; update types and
 snapshot together. JSON schemas are independently versioned. v1 now distinguishes
 execution_status from decision; the obsolete starter's OK/NOT_OK format is archived.
@@ -82,9 +83,13 @@ Typed per-function payloads, edge commands and generated TS clients remain futur
 
 ## Environments
 
-Local uses PostgreSQL 16, Redis 7, MinIO and MLflow, all bound to loopback. API/web,
-worker and inference run on the host for fast iteration. Local HTTP is development-only;
+Local runs PostgreSQL 16, Redis 7, API, inference and workers through root compose.yaml.
+The frontend runs separately by default. MinIO and MLflow are optional future-AI tools
+in infra/compose.ai-tools.yaml. All published development ports bind to loopback.
+Local HTTP is development-only;
 production requires TLS, real identity, managed secrets and measured capacity.
 No cloud provider, Kubernetes cluster or paid service is provisioned by this scaffold.
 
 Detailed table boundaries and tenancy invariants: [Data model](DATA_MODEL.md).
+
+Implementation details and target reliability mechanisms: [Distributed system](DISTRIBUTED_SYSTEM.md).

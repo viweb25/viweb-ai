@@ -1,24 +1,15 @@
 import { useEffect, useState } from 'react';
 
-type Template = { id: string; name: string; stage: string };
+import { loadCatalogue, type Template } from './services/api/catalogue';
 
 export function App() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [status, setStatus] = useState('Connecting to API…');
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      fetch('/health/live', { signal: controller.signal }).then(r => {
-        if (!r.ok) throw new Error('API unavailable');
-        return r.json();
-      }),
-      fetch('/api/v1/function-templates', { signal: controller.signal }).then(r => {
-        if (!r.ok) throw new Error('Catalogue unavailable');
-        return r.json() as Promise<Template[]>;
-      }),
-    ]).then(([, items]) => { setTemplates(items); setStatus('API connected'); })
+    loadCatalogue(controller.signal).then(([, items]) => { setTemplates(items); setStatus('API connected'); })
       .catch((error: Error) => {
-        if (error.name !== 'AbortError') setStatus('API unavailable. Start make api and refresh.');
+        if (error.name !== 'AbortError') setStatus('API unavailable. Start the backend stack and refresh.');
       });
     return () => controller.abort();
   }, []);

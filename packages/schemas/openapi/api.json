@@ -1,6 +1,36 @@
 {
   "components": {
     "schemas": {
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
       "FunctionTemplate": {
         "properties": {
           "config_schema": {
@@ -58,7 +88,7 @@
   "paths": {
     "/api/v1/function-templates": {
       "get": {
-        "description": "Public static catalogue; no customer data. All templates are planned, not trained.",
+        "description": "Public static catalogue. A template does not imply a trained model exists.",
         "operationId": "templates_api_v1_function_templates_get",
         "responses": {
           "200": {
@@ -99,6 +129,38 @@
           }
         },
         "summary": "Live",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Database and migration readiness, independent of model availability.",
+        "operationId": "ready_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Ready",
         "tags": [
           "health"
         ]

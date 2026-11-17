@@ -9,6 +9,12 @@ class Settings(BaseSettings):
 
 app = Celery("vi_websync", broker=Settings().redis_url)
 app.conf.update(
+    task_default_queue="platform",
+    task_routes={"vi.health.ping": {"queue": "platform"}},
+    broker_connection_retry_on_startup=True,
+    broker_transport_options={"visibility_timeout": 3600},
+    task_soft_time_limit=30,
+    task_time_limit=60,
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
