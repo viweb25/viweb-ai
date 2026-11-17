@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-Frontend: http://127.0.0.1:5173. API docs: http://127.0.0.1:8000/docs.
+Frontend: http://127.0.0.1:3000. API docs: http://127.0.0.1:8000/docs.
 AI docs: http://127.0.0.1:8001/docs. PostgreSQL: `127.0.0.1:15432`.
 Redis: `127.0.0.1:16379`. All published ports bind to loopback for local work.
 The migration container runs before API/worker startup; no manual table creation.
@@ -69,6 +69,17 @@ docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test python scripts/export_openapi.py --check
 ```
+
+## Local pgAdmin
+
+Use an existing pgAdmin installation on your computer. Register a server with host
+`localhost`, port `15432`, maintenance database `viws`, user `vi`, and password
+`vi_local` when using the unchanged `.env.example` defaults. Otherwise use your `.env`
+values. No pgAdmin container is required. The database is created by PostgreSQL and
+migrations are applied automatically during backend startup.
+
+The optional `make tools` command is only for developers who want pgAdmin in Docker;
+that pgAdmin instance connects to `postgres:5432` instead.
 
 ## Working agreements
 

@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.schemas.catalogue import FunctionTemplate
+from vi_api.domain.catalogue.model import FunctionTemplate
 
 
 class CatalogueRepository(Protocol):

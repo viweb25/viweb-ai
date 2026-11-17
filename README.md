@@ -18,7 +18,7 @@ npm ci
 npm run dev
 ```
 
-Frontend: http://127.0.0.1:5173. Business API: http://127.0.0.1:8000/docs.
+Frontend: http://127.0.0.1:3000. Business API: http://127.0.0.1:8000/docs.
 AI API: http://127.0.0.1:8001/docs. PostgreSQL: `127.0.0.1:15432`.
 `make tools` starts optional pgAdmin at http://127.0.0.1:15050.
 The migration job completes before the API and worker start. Development ports bind
@@ -30,14 +30,14 @@ only to loopback. See [developer workflow](docs/guides/DEVELOPER_WORKFLOW.md).
 frontend/                      React + TypeScript, independent development server
   src/services/api/            HTTP client and API-specific calls
 services/
-  api/app/
-    api/v1/controllers/        HTTP routes and dependency injection
-    services/                  Use cases
-    interfaces/                Dependency protocols
-    repositories/              Storage implementations
-    schemas/                   Typed wire contracts
-    models/                    SQLAlchemy persistence models
-    core/                      Settings
+  api/src/vi_api/
+    bootstrap.py               FastAPI startup and router registration
+    container.py               Dependency composition
+    interfaces/http/           Controllers and HTTP schemas
+    app/                       Application operations (one per use case)
+    domain/                    Business models and repository protocols
+    infrastructure/            Repository implementations and SQLAlchemy models
+    config/                    Environment settings
   inference/                   Separate AI inference backend
   worker/                      Celery jobs and Redis messaging
   edge-agent/                  Factory runtime simulation and future adapters
@@ -75,7 +75,7 @@ Actual results and limitations: [validation](docs/releases/FOUNDATION_VALIDATION
 
 ## What exists
 
-The API exposes a public static catalogue through controller/service/repository layers,
+The API exposes a public static catalogue through controller/operation/domain/repository layers,
 process liveness and migration-aware DB readiness. The frontend calls the API through
 service modules. Compose defines PostgreSQL, Redis, migration, API, AI API and worker
 containers. Celery has a health task. Ten SQL diagnostics support database inspection.
@@ -87,6 +87,7 @@ billing or provisioned cloud environment. Catalogue entries are planned capabili
 
 ## Design and delivery guides
 
+- [Backend layers and feature implementation](services/api/README.md)
 - [Distributed system, service boundaries and reliable jobs](docs/architecture/DISTRIBUTED_SYSTEM.md)
 - [AI integration, training, evaluation and deployment](docs/guides/AI_LIFECYCLE.md)
 - [Database, migrations, SQL functions and pgAdmin](database/README.md)

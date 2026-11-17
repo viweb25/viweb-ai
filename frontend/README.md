@@ -7,7 +7,7 @@ npm ci
 npm run dev
 ```
 
-Use Node 22 (`nvm install && nvm use`). Open http://127.0.0.1:5173. Vite proxies
+Use Node 22 (`nvm install && nvm use`). Open http://127.0.0.1:3000. Vite proxies
 `/api` and `/health` to VITE_API_URL from the root `.env`; no browser-side service
 DNS, database credentials or direct AI-service calls. Keep environment settings
 free of secrets: anything prefixed VITE_ can become browser-visible.

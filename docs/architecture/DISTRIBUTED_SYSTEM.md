@@ -2,7 +2,7 @@
 
 ## Working foundation and target system
 
-Implemented: frontend HTTP service module; layered static catalogue; API liveness and
+Implemented: frontend HTTP service module; controller/operation/domain/repository catalogue; API liveness and
 DB readiness; separate unavailable-model AI API; Celery health job over Redis; PostgreSQL
 migrations and diagnostic functions; Compose definitions and automated checks.
 
@@ -48,7 +48,7 @@ Python internals or direct cross-owner table writes.
 
 ## Request and transaction path
 
-Controller validates the HTTP contract and verified identity. The service checks
+Controller validates the HTTP contract and verified identity. The application operation checks
 membership/role, resolves tenant-scoped dependencies and starts a unit of work.
 Repository interfaces require an explicit tenant context. Implementations filter
 reads and writes by organisation; composite foreign keys prevent cross-tenant links.

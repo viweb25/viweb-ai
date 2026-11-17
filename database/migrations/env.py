@@ -1,10 +1,10 @@
 import asyncio
 
 from alembic import context
-from app.core.settings import Settings
-from app.models.base import Base
-from app.models.organisation import Organisation  # noqa: F401
 from sqlalchemy.ext.asyncio import create_async_engine
+from vi_api.config.settings import Settings
+from vi_api.infrastructure.database.models.base import Base
+from vi_api.infrastructure.database.models.organisation import Organisation  # noqa: F401
 
 
 def configure(connection=None):

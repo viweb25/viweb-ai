@@ -40,3 +40,23 @@ AI-tools stack was not started and is not integrated with training.
 Backend containers and pgAdmin were left running for inspection. The optional frontend
 container was stopped so a separate local frontend can use port 5173. Local volumes
 were preserved. No cloud resources were provisioned and no Git commit was created.
+
+## Backend layer refactor follow-up
+
+Business API code now lives under `services/api/src/vi_api` with HTTP controllers,
+application operations, framework-independent domain contracts and infrastructure
+repositories. Docker, Alembic, CI, Make and test import paths were updated together.
+The frontend development port is now 3000; local pgAdmin connection details are documented.
+
+Verified after the refactor:
+
+- Python suite: **23 passed**, including inner-layer dependency boundaries and operation
+  failure propagation, plus the existing PostgreSQL integration checks.
+- Ruff lint/format checks passed; final formatting check covered 63 Python files.
+- Business and AI OpenAPI drift checks passed; public wire contracts did not change.
+- Broad `make docker-check docker-contracts` passed before the final health-controller
+  extraction; backend tests, lint, formatting and contracts passed again after it.
+- Live API readiness and eight-entry catalogue requests passed on the rebuilt stack.
+- Migrations and worker startup succeeded with the new source path.
+
+Changes remain local and uncommitted; they have not been pushed to GitHub.
