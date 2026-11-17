@@ -1,19 +1,22 @@
-"""Export/check the public API contract. Run with the root PYTHONPATH (make contracts)."""
+"""Export/check business and inference API snapshots using the root PYTHONPATH."""
 
 import argparse
 import json
 from pathlib import Path
 
-from app.main import app
+from app.main import app as business_app
+from vi_inference.main import app as inference_app
 
-path = Path(__file__).resolve().parents[1] / "packages/schemas/openapi/api.json"
+ROOT = Path(__file__).resolve().parents[1] / "packages/schemas/openapi"
 parser = argparse.ArgumentParser()
 parser.add_argument("--check", action="store_true")
 args = parser.parse_args()
-content = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
-if args.check:
-    if not path.exists() or path.read_text() != content:
-        raise SystemExit("OpenAPI drift: run uv run python scripts/export_openapi.py")
-else:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+for name, app in (("api.json", business_app), ("inference.json", inference_app)):
+    path = ROOT / name
+    content = json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
+    if args.check:
+        if not path.exists() or path.read_text() != content:
+            raise SystemExit(f"OpenAPI drift ({name}): run make export-contracts")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)

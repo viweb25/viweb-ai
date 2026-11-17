@@ -1,18 +1,31 @@
 SHELL := /bin/bash
 UV ?= uv
-COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
+COMPOSE := docker compose --env-file .env -f compose.yaml
 export PYTHONPATH := services/api:services/worker:services/inference:services/edge-agent:ai:packages/core
 .DEFAULT_GOAL := help
 
 help:
-	@echo "setup | install | up | down | api | web | dev | inference | worker | worker-ping | edge-dev | migrate | test | lint | format | build | check | doctor | contracts"
+	@echo "setup | install | up | tools | docker-check | docker-contracts | docker-test | docker-ping | down | api | web | dev | inference | worker | worker-ping | edge-dev | migrate | test | lint | format | build | check | doctor | contracts"
 setup:
 	@test -f .env || cp .env.example .env
 install:
 	$(UV) sync --locked
 	npm ci
 up: setup
-	$(COMPOSE) up -d --wait
+	$(COMPOSE) up -d --build --wait
+tools: setup
+	$(COMPOSE) --profile tools up -d pgadmin
+docker-test: setup
+	$(COMPOSE) run --build --rm test
+docker-check: docker-test
+	$(COMPOSE) run --rm test ruff check --no-cache .
+	$(COMPOSE) run --rm test ruff format --no-cache --check .
+	$(COMPOSE) run --rm frontend npm run typecheck
+	$(COMPOSE) run --rm frontend npm run build
+docker-contracts: setup
+	$(COMPOSE) run --rm test python scripts/export_openapi.py --check
+docker-ping:
+	$(COMPOSE) exec worker python -m worker.enqueue
 down:
 	$(COMPOSE) down
 api:
@@ -30,7 +43,7 @@ worker-ping:
 edge-dev:
 	$(UV) run python -m vi_edge
 migrate:
-	$(UV) run alembic -c services/api/alembic.ini upgrade head
+	$(UV) run alembic -c database/alembic.ini upgrade head
 test:
 	$(UV) run pytest -q
 lint:
@@ -43,8 +56,10 @@ format:
 build:
 	npm run build --workspace @vi/web
 check: lint test build
+export-contracts:
+	$(UV) run python scripts/export_openapi.py
 contracts:
 	$(UV) run python scripts/export_openapi.py --check
 doctor:
 	python3 scripts/doctor.py
-.PHONY: help setup install up down api web dev inference worker worker-ping edge-dev migrate test lint format build check doctor contracts
+.PHONY: help setup install up down api web dev inference worker worker-ping edge-dev migrate test lint format build check doctor contracts export-contracts tools docker-test docker-ping docker-check docker-contracts

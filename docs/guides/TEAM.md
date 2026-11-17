@@ -3,7 +3,7 @@
 | Person | Primary ownership | Start commands | Next tasks |
 | --- | --- | --- | --- |
 | Siva | API, database, jobs/worker, infra, rules, edge sync, licensing | `make up`, `make migrate`, `make api`, `make worker` | T010, T012, T013, T014 |
-| Hemachandran | apps/web, schema-driven forms, annotations, dashboards | `make web` (and `make api` for catalogue) | T016, T017, T019 |
+| Hemachandran | frontend, schema-driven forms, annotations, dashboards | `make web` (and `make api` for catalogue) | T016, T017, T019 |
 | Akash | ai, inference, camera/PLC/DAQ adapters, LabVIEW | `make inference`, `make edge-dev` | T011, T030, T031, T032 |
 | All three | schemas, core, integration and acceptance | `make check`, `make contracts` | Review interfaces together |
 

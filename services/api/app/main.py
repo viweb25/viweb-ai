@@ -1,26 +1,19 @@
-import json
-from pathlib import Path
-
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy import text
 from starlette.exceptions import HTTPException
 
-ROOT = Path(__file__).resolve().parents[3]
+from app.api.v1.controllers.catalogue import router as catalogue_router
+from app.db import engine
+
 app = FastAPI(title="VI WebSync API", version="0.1.0")
 
 
 class Health(BaseModel):
     status: str
     service: str
-
-
-class FunctionTemplate(BaseModel):
-    id: str
-    name: str
-    stage: str
-    config_schema: dict
 
 
 class ErrorDetail(BaseModel):
@@ -56,8 +49,28 @@ def live():
     return Health(status="ok", service="api")
 
 
-@app.get("/api/v1/function-templates", response_model=list[FunctionTemplate], tags=["catalogue"])
-def templates():
-    """Public static catalogue; no customer data. All templates are planned, not trained."""
-    path = ROOT / "packages/schemas/functions/catalogue.json"
-    return json.loads(path.read_text())
+app.include_router(catalogue_router)
+
+
+@app.get(
+    "/health/ready",
+    response_model=Health,
+    tags=["health"],
+    responses={503: {"model": ErrorResponse}},
+)
+async def ready():
+    """Database and migration readiness, independent of model availability."""
+    import asyncio
+
+    try:
+        async with asyncio.timeout(3):
+            async with engine.connect() as connection:
+                revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
+                if revision != "0002":
+                    raise RuntimeError("Migration revision mismatch")
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"error": {"code": "not_ready", "message": "Database migration not ready"}},
+        )
+    return Health(status="ok", service="api")

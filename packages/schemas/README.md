@@ -3,6 +3,7 @@
 Owners: all three developers; Siva coordinates API contracts and Akash function schemas.
 
 - openapi/api.json: generated public API snapshot; `make contracts` checks drift.
+- openapi/inference.json: generated AI API snapshot, including model-unavailable responses.
 - functions/catalogue.json: eight planned templates with minimal name-only schemas.
 - functions/manifest.schema.json: initial package manifest shape; signature protocol remains future work.
 - results/inspection.schema.json: v1 result envelope with separate execution/decision.
@@ -14,3 +15,5 @@ Current tests validate schemas, examples, planned configs and unsafe status comb
 Add typed payload schemas and real examples with every function. No one claims generic
 payload objects already validate detection boxes, OCR text or measurement uncertainty.
 Shared contracts require two human approvals; configure enforcement in the real remote.
+
+Run `make export-contracts` to regenerate both snapshots, or use the Docker test service.

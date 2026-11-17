@@ -1,12 +1,10 @@
-# inference
+# AI inference backend
 
-Owner: Akash. Run from repository root after make install.
+Owner: Akash. Compose service: `ai-api`; host command: `make inference`.
+`GET /health/live` reports the process and zero loaded packages.
+`POST /api/v1/predict` returns 503 `model_not_loaded`. No trained model is bundled.
 
-```bash
-make inference
-```
-
-Health and a 503 model-not-loaded prediction response are implemented. No weights are included. Add package verification, load/unload and real predictions with golden tests.
-
-See docs/guides/TEAM.md for the work split and docs/architecture/ARCHITECTURE.md
-for target interfaces. Run make test before requesting review.
+The AI runtime is independent of business API access/approval logic. See
+`docs/guides/AI_LIFECYCLE.md` for plugin contracts, training/evaluation, packaging and
+integration. Keep future GPU dependencies in a separate AI image. Model unavailability
+must never become a successful inspection or permit PASS.

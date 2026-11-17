@@ -1,28 +1,5 @@
-name: vi-websync
+name: vi-websync-ai-tools
 services:
-  postgres:
-    image: postgres:16.8-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-vi}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vi_local}
-      POSTGRES_DB: ${POSTGRES_DB:-viws}
-    ports: ["127.0.0.1:${POSTGRES_PORT:-15432}:5432"]
-    volumes: ["pgdata:/var/lib/postgresql/data"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-  redis:
-    image: redis:7.4-alpine
-    ports: ["127.0.0.1:${REDIS_PORT:-16379}:6379"]
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes: ["redisdata:/data"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
   minio:
     build:
       context: ..
@@ -51,7 +28,5 @@ services:
       timeout: 5s
       retries: 20
 volumes:
-  pgdata:
-  redisdata:
   objectdata:
   mlflowdata:
