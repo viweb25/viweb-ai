@@ -1,8 +1,9 @@
 from uuid import UUID, uuid4
 
-from app.models.base import Base
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
+
+from vi_api.infrastructure.database.models.base import Base
 
 
 class Organisation(Base):

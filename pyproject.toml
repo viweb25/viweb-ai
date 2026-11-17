@@ -18,7 +18,7 @@ dev = ["pytest>=8.3,<9", "ruff>=0.11,<0.12"]
 package = false
 
 [tool.pytest.ini_options]
-pythonpath = ["services/api", "services/worker", "services/inference", "services/edge-agent", "ai", "packages/core"]
+pythonpath = ["services/api/src", "services/worker", "services/inference", "services/edge-agent", "ai", "packages/core"]
 testpaths = ["tests", "database/tests", "services/api/tests", "services/worker/tests", "services/inference/tests", "services/edge-agent/tests", "ai/tests"]
 
 [tool.ruff]

@@ -14,6 +14,17 @@ make tools
 make docker-test
 ```
 
+If pgAdmin is installed on your computer, register the Docker database with:
+
+- Host: `localhost`
+- Port: `15432` (or POSTGRES_PORT from `.env`)
+- Maintenance database: POSTGRES_DB from `.env` (default `viws`)
+- Username: POSTGRES_USER from `.env` (default `vi`)
+- Password: POSTGRES_PASSWORD from `.env` (default `vi_local`)
+
+Local pgAdmin does not need `make tools`. PostgreSQL must be running in Docker.
+
+Alternatively, use the optional containerised pgAdmin below.
 Open pgAdmin at http://127.0.0.1:15050. Use the development credentials in `.env`.
 Register server `local`, host `postgres`, port `5432`, database `viws`, user/password
 matching POSTGRES_USER/POSTGRES_PASSWORD. The container uses the service hostname;

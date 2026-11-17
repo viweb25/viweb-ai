@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from app.main import app as business_app
+from vi_api.bootstrap import app as business_app
 from vi_inference.main import app as inference_app
 
 ROOT = Path(__file__).resolve().parents[1] / "packages/schemas/openapi"

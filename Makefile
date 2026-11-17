@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 UV ?= uv
 COMPOSE := docker compose --env-file .env -f compose.yaml
-export PYTHONPATH := services/api:services/worker:services/inference:services/edge-agent:ai:packages/core
+export PYTHONPATH := services/api/src:services/worker:services/inference:services/edge-agent:ai:packages/core
 .DEFAULT_GOAL := help
 
 help:
@@ -29,7 +29,7 @@ docker-ping:
 down:
 	$(COMPOSE) down
 api:
-	$(UV) run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+	$(UV) run uvicorn vi_api.bootstrap:app --reload --host 127.0.0.1 --port 8000
 web:
 	npm run dev --workspace @vi/web
 dev:

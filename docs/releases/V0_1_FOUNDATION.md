@@ -5,7 +5,7 @@ This change is a foundation improvement, not completion of the first customer re
 ## Included in this change
 
 - Frontend in `frontend/`; HTTP calls under `src/services/api/`.
-- Business API catalogue through controller/service/interface/repository layers.
+- Business API catalogue through controller/application-operation/domain/infrastructure layers.
 - Separate AI backend with an explicit 503 when no approved model is loaded.
 - Database migrations in `database/`, ten diagnostic SQL functions and database checks.
 - Docker definitions for API, AI API, PostgreSQL, Redis, Celery worker and migration job.

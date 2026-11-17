@@ -1,8 +1,8 @@
-from app.api.dependencies import catalogue_service
-from app.main import app
-from app.schemas.catalogue import FunctionTemplate
-from app.services.catalogue import CatalogueService
 from fastapi.testclient import TestClient
+from vi_api.app.catalogue.get_function_templates import GetFunctionTemplates
+from vi_api.bootstrap import app
+from vi_api.container import get_function_templates
+from vi_api.domain.catalogue.model import FunctionTemplate
 
 
 class FakeRepository:
@@ -13,7 +13,9 @@ class FakeRepository:
 
 
 def test_controller_uses_injected_service_and_repository():
-    app.dependency_overrides[catalogue_service] = lambda: CatalogueService(FakeRepository())
+    app.dependency_overrides[get_function_templates] = lambda: GetFunctionTemplates(
+        FakeRepository()
+    )
     try:
         response = TestClient(app).get("/api/v1/function-templates")
         assert response.status_code == 200
@@ -27,7 +29,7 @@ def test_readiness_fails_closed_when_database_is_unavailable(monkeypatch):
         def connect(self):
             raise ConnectionError("private connection detail")
 
-    monkeypatch.setattr("app.main.engine", UnavailableEngine())
+    monkeypatch.setattr("vi_api.container.engine", UnavailableEngine())
     response = TestClient(app).get("/health/ready")
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "not_ready"
