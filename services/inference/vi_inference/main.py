@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from vi_inference.demo_inspection import router as demo_inspection_router
+
 app = FastAPI(title="VI WebSync Inference", version="0.1.0")
+app.include_router(demo_inspection_router)
 
 
 class Health(BaseModel):

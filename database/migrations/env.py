@@ -4,6 +4,7 @@ from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 from vi_api.config.settings import Settings
 from vi_api.infrastructure.database.models.base import Base
+from vi_api.infrastructure.database.models.demo_example import DemoExampleRow  # noqa: F401
 from vi_api.infrastructure.database.models.organisation import Organisation  # noqa: F401
 
 

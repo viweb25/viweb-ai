@@ -4,6 +4,8 @@ This is a provider-neutral deployment plan, not provisioned infrastructure or a 
 production runbook. No provider/account/domain has been selected. Provider-specific
 commands, sizing and prices require a separate verified deployment task.
 
+Hostzop staging steps are in [HOSTZOP_STAGING.md](HOSTZOP_STAGING.md).
+
 ## Deployment layout
 
 Serve the built frontend from static hosting/CDN behind TLS. Route `/api/v1` and

@@ -11,7 +11,7 @@ COPY services services
 COPY packages packages
 COPY ai ai
 COPY database database
-RUN useradd --uid 10001 --create-home platform
+RUN useradd --uid 10001 --create-home platform && install -d -m 0700 -o platform /var/lib/viweb-demo
 USER platform
 FROM base AS development
 USER root

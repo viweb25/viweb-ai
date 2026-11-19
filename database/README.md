@@ -74,3 +74,30 @@ docker compose run --rm migrate alembic -c database/alembic.ini upgrade head --s
 
 Use this output for review. Alembic remains the deployment authority; do not maintain
 a second hand-edited schema.sql with a different version history.
+
+## Identity in pgAdmin
+
+Open the **Query Tool** for `viws`. Alembic applies
+[0004_identity.sql](migrations/sql/0004_identity.sql) and
+[0005_password_sign_in.sql](migrations/sql/0005_password_sign_in.sql) during backend
+startup. Both files show the PostgreSQL DDL statement by statement.
+
+```sql
+SELECT version_num FROM public.alembic_version;
+
+SELECT u.id AS user_id, c.email, o.name AS organisation, m.role, m.status
+FROM identity.password_credentials AS c
+JOIN identity.users AS u ON u.id = c.user_id
+JOIN identity.memberships AS m ON m.user_id = u.id
+JOIN public.organisations AS o ON o.id = m.org_id
+ORDER BY o.name, c.email;
+```
+
+Create an owner using the CLI in the [sign-in guide](../docs/guides/SIGN_IN.md).
+It prompts for the password and writes its salted hash inside the account transaction.
+Periodic database maintenance can delete expired sessions and old sign-in limit buckets.
+
+```sql
+DELETE FROM identity.sessions WHERE expires_at <= now();
+DELETE FROM identity.sign_in_limits WHERE window_started_at < now() - interval '1 day';
+```

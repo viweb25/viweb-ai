@@ -1,23 +1,53 @@
 # Frontend
 
-Owner: Hemachandran. Run separately from Docker backends:
+From the repository root, run with Node 22:
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Use Node 22 (`nvm install && nvm use`). Open http://127.0.0.1:3000. Vite proxies
-`/api` and `/health` to VITE_API_URL from the root `.env`; no browser-side service
-DNS, database credentials or direct AI-service calls. Keep environment settings
-free of secrets: anything prefixed VITE_ can become browser-visible.
+Open http://127.0.0.1:3000. The alternative is
+`docker compose --profile frontend up -d --build frontend`.
 
-`src/services/api/client.ts` owns HTTP handling; `catalogue.ts` owns catalogue calls
-and types. Components render state and call these services. Add feature directories
-when real screens exist. TypeScript currently uses handwritten catalogue types;
-generated OpenAPI clients are a future task. Review types and contracts together.
+## Dashboard
 
-Optional container: `docker compose --profile frontend up -d --build frontend`.
-It uses an internal proxy target provided by `infra/docker/frontend.env`.
-This is a development server, not a production image. Cloud production should serve
-a compiled static build and route API requests to the business backend.
+- **Overview** counts inspection responses in the current browser session.
+- **Inspection** sends a camera frame or uploaded image and an acceptance rule to inference.
+- **Training examples** reads and writes labeled examples through the business API.
+- **Function catalogue** displays templates returned by the business API.
+- **Preferences** uses `src/context/WorkspacePreferences.tsx` for the workspace display name
+  and acceptance rule. Preferences are stored in this browser. The display name is
+  presentation only. Company identity and authorisation belong to the backend.
+
+## API modules
+
+`src/services/api/client.ts` handles JSON and API errors. The feature modules
+`inspection.ts`, `trainingExamples.ts`, `catalogue.ts`, and `health.ts` own their
+endpoints and response types. Vite proxies requests to the backend and inference service.
+See `vite.config.ts` for targets. Keep secrets out of VITE-prefixed environment variables.
+
+Run `npm run typecheck` and `npm run build` from the repository root before merging.
+
+For the dashboard's owner account setup, see the
+[sign-in guide](../docs/guides/SIGN_IN.md).
+
+## Camera connections
+
+In **Inspection → Image source**, select a camera and click **Start camera**. Grant
+camera permission if prompted. Some browsers reveal device names only after you
+grant permission. Stop the current camera to select another, then start it.
+
+- Connect USB cameras and HDMI capture adapters to the computer running the dashboard.
+  If the operating system and browser expose the device as a camera, it appears in the list.
+- For a phone or tablet, open the dashboard on that device over HTTPS and select its
+  camera. The local development address binds to the laptop and is for use on that
+  laptop. You can also use **Take a photo** on a supported mobile browser or upload a saved photo.
+- For CCTV, NVR, or industrial Ethernet cameras, open the vendor viewer on the
+  dashboard computer. In a desktop browser that supports window or tab capture, use
+  **Share camera viewer**, select only the viewer, and click
+  **Capture frame**. To feed raw RTSP or a vendor SDK directly, a camera-specific edge
+  adapter is needed. The browser picker lists locally exposed devices.
+
+Use **Capture frame** before inspecting or labeling. Camera and viewer preview run
+in the browser. The inspection API receives the JPEG you submit.

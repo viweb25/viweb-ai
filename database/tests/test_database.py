@@ -17,7 +17,7 @@ def test_migrations_and_diagnostic_functions():
         try:
             async with engine.connect() as connection:
                 assert (
-                    await connection.scalar(text("SELECT platform.usp_schema_version()")) == "0002"
+                    await connection.scalar(text("SELECT platform.usp_schema_version()")) == "0005"
                 )
                 assert await connection.scalar(text("SELECT platform.usp_migration_table_exists()"))
                 assert await connection.scalar(text("SELECT platform.usp_database_name()"))

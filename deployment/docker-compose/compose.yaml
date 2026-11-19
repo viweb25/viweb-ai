@@ -1,0 +1,5 @@
+name: vi-websync
+# Local entry point. Keep service definitions and build paths in the shared topology.
+include:
+  - path: ../../compose.yaml
+    project_directory: ../..

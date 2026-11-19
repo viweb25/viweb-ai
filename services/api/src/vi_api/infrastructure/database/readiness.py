@@ -15,6 +15,6 @@ class DatabaseReadinessRepository:
                     revision = await connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                    return revision == "0002"
+                    return revision == "0005"
         except Exception:
             return False
