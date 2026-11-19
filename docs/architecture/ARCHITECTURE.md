@@ -56,8 +56,8 @@ query, object-storage key, worker job and audit entry by organisation; reject cr
 references even when IDs exist. Add tenant isolation tests when tenant resources are added.
 Organisation itself is the root and has id, not a redundant org_id.
 Never ship local demo credentials, expose internal inference publicly, or use a request
-header as trusted identity. OIDC/JWT verification, role enforcement and device certificates
-are planned. No tenant endpoints are exposed by the scaffold.
+header as trusted identity. Password sign-in issues a database-backed browser session.
+Device certificates and tenant resource endpoints remain planned.
 
 ## Data ownership
 

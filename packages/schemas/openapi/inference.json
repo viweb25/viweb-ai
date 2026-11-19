@@ -31,6 +31,19 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "Health": {
         "properties": {
           "loaded_packages": {
@@ -53,6 +66,73 @@
         ],
         "title": "Health",
         "type": "object"
+      },
+      "InspectionResult": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "HOLD"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "reason"
+        ],
+        "title": "InspectionResult",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
       }
     }
   },
@@ -62,6 +142,62 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/demo/inspect": {
+      "post": {
+        "operationId": "inspect_image_api_v1_demo_inspect_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "rule",
+            "required": true,
+            "schema": {
+              "maxLength": 400,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Rule",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inspect Image",
+        "tags": [
+          "Visual inspection demo"
+        ]
+      }
+    },
     "/api/v1/predict": {
       "post": {
         "description": "No approved model is loaded. Never fabricate a successful inspection.",

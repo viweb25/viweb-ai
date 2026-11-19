@@ -8,6 +8,10 @@ This repository is a developer foundation, not a production-ready inspection sys
 
 ## Start development
 
+For a single backend startup command, see [deployment/docker-compose](deployment/docker-compose/README.md).
+The [backend code map](docs/guides/LOCAL_BACKEND.md) follows requests, migrations, and Redis jobs through the code.
+The [sign-in guide](docs/guides/SIGN_IN.md) covers identity provider setup and pgAdmin.
+
 Run backend services in Docker and the frontend separately. Requires Docker Compose
 and Node 22; Python/uv are optional for host backend development.
 
@@ -99,3 +103,33 @@ billing or provisioned cloud environment. Catalogue entries are planned capabili
 Imported source documents and archived starter instructions are preserved as reference.
 Historical handbook/planning exports can describe the previous layout; this README
 and the current developer workflow are the active setup instructions.
+
+## Local visual inspection demo
+
+Start the local Qwen vision-language model and download its weights once while online.
+
+```bash
+make setup
+docker compose --profile vision up -d ollama
+docker compose exec ollama ollama pull qwen2.5vl:3b
+VI_DEMO_OLLAMA_URL=http://ollama:11434 docker compose --profile vision --profile frontend up -d --build --wait
+```
+
+Open http://127.0.0.1:3000, capture or choose a photo, enter the acceptance rule,
+and click **Inspect image**. The model receives the image and rule on the local Docker
+network. The downloaded weights live in the `ollama_models` volume. CPU performance
+depends on the demo laptop. Check known good, known defective, and unclear images before
+presenting, then rehearse with the internet disconnected. After the first build and
+model download, restart without building or pulling images.
+
+```bash
+VI_DEMO_OLLAMA_URL=http://ollama:11434 docker compose --profile vision --profile frontend up -d --no-build --pull never --wait
+```
+
+### Collect examples for a dedicated model
+
+To enable the optional **Collect training examples** panel, also set
+`VI_DEMO_IMAGE_DIR=/var/lib/viweb-demo` when starting the stack. Enter a physical
+part ID and save the operator label. PostgreSQL stores the metadata, and the
+`demoimages` volume stores the JPEGs. The demo workspace is shared locally and has no
+sign-in. Use practice photos.

@@ -49,6 +49,17 @@ services:
       postgres: {condition: service_healthy}
   api:
     <<: *python
+    environment:
+      <<: *environment
+      VI_DEMO_IMAGE_DIR: ${VI_DEMO_IMAGE_DIR:-}
+      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:3000}
+      REDIS_CACHE_URL: redis://redis:6379/1
+    volumes:
+      - ./services:/workspace/services
+      - ./packages:/workspace/packages
+      - ./ai:/workspace/ai
+      - ./database:/workspace/database
+      - demoimages:/var/lib/viweb-demo
     command: ["uvicorn", "vi_api.bootstrap:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports: ["127.0.0.1:${API_PORT:-8000}:8000"]
     depends_on:
@@ -60,6 +71,10 @@ services:
       retries: 10
   ai-api:
     <<: *python
+    environment:
+      <<: *environment
+      VI_DEMO_OLLAMA_URL: ${VI_DEMO_OLLAMA_URL:-}
+      VI_DEMO_VISION_MODEL: ${VI_DEMO_VISION_MODEL:-qwen2.5vl:3b}
     command: ["uvicorn", "vi_inference.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
     ports: ["127.0.0.1:${AI_API_PORT:-8001}:8001"]
     healthcheck:
@@ -67,6 +82,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+  ollama:
+    image: ollama/ollama:0.16.3
+    profiles: ["vision"]
+    environment:
+      OLLAMA_NO_CLOUD: "1"
+    volumes: ["ollama_models:/root/.ollama"]
   worker:
     <<: *python
     command: ["celery", "-A", "worker.app:app", "worker", "--loglevel=info", "--concurrency=2", "--queues=platform"]
@@ -118,3 +139,5 @@ volumes:
   pgdata:
   redisdata:
   pgadmindata:
+  demoimages:
+  ollama_models:
