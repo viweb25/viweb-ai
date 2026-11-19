@@ -1,143 +1,125 @@
-name: vi-websync
-x-python: &python
+name: vi-websync-backend
+x-runtime: &runtime
+  image: ${BACKEND_IMAGE:-vi-websync/backend:staging}
   build:
     context: .
-    dockerfile: infra/docker/python.Dockerfile
-    target: development
-  environment: &environment
-    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-vi}:${POSTGRES_PASSWORD:-vi_local}@postgres:5432/${POSTGRES_DB:-viws}
-    REDIS_URL: redis://redis:6379/0
-    INFERENCE_URL: http://ai-api:8001
+    dockerfile: Dockerfile
+    target: base
   init: true
-  volumes:
-    - ./services:/workspace/services
-    - ./packages:/workspace/packages
-    - ./ai:/workspace/ai
-    - ./database:/workspace/database
   restart: unless-stopped
 services:
   postgres:
     image: postgres:16.8-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vi}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vi_local}
       POSTGRES_DB: ${POSTGRES_DB:-viws}
-    ports: ["127.0.0.1:${POSTGRES_PORT:-15432}:5432"]
-    volumes: ["pgdata:/var/lib/postgresql/data"]
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a database password}
+    volumes:
+      - postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 20
     restart: unless-stopped
+
   redis:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
-    ports: ["127.0.0.1:${REDIS_PORT:-16379}:6379"]
-    volumes: ["redisdata:/data"]
+    volumes:
+      - redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
     restart: unless-stopped
+
   migrate:
-    <<: *python
+    image: ${DB_MIGRATION_IMAGE:-vi-websync/db:staging}
+    environment:
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set the migration database URL}
     command: ["alembic", "-c", "database/alembic.ini", "upgrade", "head"]
     restart: "no"
     depends_on:
       postgres: {condition: service_healthy}
+
   api:
-    <<: *python
+    <<: *runtime
     environment:
-      <<: *environment
-      VI_DEMO_IMAGE_DIR: ${VI_DEMO_IMAGE_DIR:-}
-      APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:3000}
+      DATABASE_URL: ${DATABASE_URL:?Set the runtime database URL}
+      APP_ORIGIN: ${APP_ORIGIN:?Set the frontend HTTPS origin}
       REDIS_CACHE_URL: redis://redis:6379/1
-    volumes:
-      - ./services:/workspace/services
-      - ./packages:/workspace/packages
-      - ./ai:/workspace/ai
-      - ./database:/workspace/database
-      - demoimages:/var/lib/viweb-demo
-    command: ["uvicorn", "vi_api.bootstrap:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-    ports: ["127.0.0.1:${API_PORT:-8000}:8000"]
+      VI_DEMO_IMAGE_DIR: ""
+    command: ["uvicorn", "vi_api.bootstrap:app", "--host", "0.0.0.0", "--port", "8000", "--forwarded-allow-ips", "${GATEWAY_IP:-172.30.85.2}"]
+    networks:
+      default: {}
+      gateway:
+        ipv4_address: ${API_GATEWAY_IP:-172.30.85.3}
     depends_on:
       migrate: {condition: service_completed_successfully}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
       interval: 10s
       timeout: 5s
-      retries: 10
-  ai-api:
-    <<: *python
+      retries: 12
+
+  gateway:
+    image: caddy:2.10-alpine
     environment:
-      <<: *environment
+      BACKEND_SITE: ${BACKEND_SITE:?Set the backend HTTPS hostname}
+      VI_GATEWAY_KEY: ${VI_GATEWAY_KEY:?Set the shared gateway key}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tls:/data
+    networks:
+      gateway:
+        ipv4_address: ${GATEWAY_IP:-172.30.85.2}
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
+
+  worker:
+    <<: *runtime
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    command: ["celery", "-A", "worker.app:app", "worker", "--loglevel=info", "--concurrency=2", "--queues=platform"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  ai-api:
+    image: ${AI_RUNTIME_IMAGE:-vi-websync/inference:staging}
+    restart: unless-stopped
+    environment:
       VI_DEMO_OLLAMA_URL: ${VI_DEMO_OLLAMA_URL:-}
       VI_DEMO_VISION_MODEL: ${VI_DEMO_VISION_MODEL:-qwen2.5vl:3b}
-    command: ["uvicorn", "vi_inference.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
-    ports: ["127.0.0.1:${AI_API_PORT:-8001}:8001"]
+    command: ["uvicorn", "vi_inference.main:app", "--host", "0.0.0.0", "--port", "8001"]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/live')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/live', timeout=3)"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 12
+
   ollama:
     image: ollama/ollama:0.16.3
     profiles: ["vision"]
     environment:
       OLLAMA_NO_CLOUD: "1"
-    volumes: ["ollama_models:/root/.ollama"]
-  worker:
-    <<: *python
-    command: ["celery", "-A", "worker.app:app", "worker", "--loglevel=info", "--concurrency=2", "--queues=platform"]
-    depends_on:
-      migrate: {condition: service_completed_successfully}
-      redis: {condition: service_healthy}
-    healthcheck:
-      test: ["CMD-SHELL", "celery -A worker.app:app inspect ping --destination celery@$$HOSTNAME --timeout 3"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-  pgadmin:
-    image: dpage/pgadmin4:9.2
-    profiles: ["tools"]
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-developer@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-local_pgadmin_only}
-    ports: ["127.0.0.1:${PGADMIN_PORT:-15050}:80"]
-    volumes: ["pgadmindata:/var/lib/pgadmin"]
-    depends_on:
-      postgres: {condition: service_healthy}
-  frontend:
-    profiles: ["frontend"]
-    build:
-      context: .
-      dockerfile: infra/docker/frontend.Dockerfile
-    ports: ["127.0.0.1:3000:3000"]
-    # Vite reads the root .env inside the container; browser requests remain same-origin.
     volumes:
-      - ./frontend/src:/workspace/frontend/src
-      - ./infra/docker/frontend.env:/workspace/.env:ro
-    depends_on:
-      api: {condition: service_healthy}
-  test:
-    <<: *python
-    profiles: ["test"]
-    command: ["pytest", "-q", "-p", "no:cacheprovider"]
-    restart: "no"
-    volumes:
-      - .:/workspace/source:ro
-    working_dir: /workspace/source
-    environment:
-      <<: *environment
-      PYTHONPATH: /workspace/source/services/api/src:/workspace/source/services/worker:/workspace/source/services/inference:/workspace/source/services/edge-agent:/workspace/source/ai:/workspace/source/packages/core
-      DATABASE_TEST_URL: postgresql+asyncpg://${POSTGRES_USER:-vi}:${POSTGRES_PASSWORD:-vi_local}@postgres:5432/${POSTGRES_DB:-viws}
-    depends_on:
-      migrate: {condition: service_completed_successfully}
+      - models:/root/.ollama
+    restart: unless-stopped
+
+networks:
+  gateway:
+    ipam:
+      config:
+        - subnet: ${GATEWAY_SUBNET:-172.30.85.0/24}
 volumes:
-  pgdata:
-  redisdata:
-  pgadmindata:
-  demoimages:
-  ollama_models:
+  postgres:
+  redis:
+  tls:
+  models:
