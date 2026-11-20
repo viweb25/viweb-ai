@@ -49,6 +49,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set the runtime database URL}
       APP_ORIGIN: ${APP_ORIGIN:?Set the frontend HTTPS origin}
+      SIGNUP_CODE: ${SIGNUP_CODE:-}
+      INFERENCE_URL: http://ai-api:8001
       REDIS_CACHE_URL: redis://redis:6379/1
       VI_DEMO_IMAGE_DIR: ""
     command: ["uvicorn", "vi_api.bootstrap:app", "--host", "0.0.0.0", "--port", "8000", "--forwarded-allow-ips", "${GATEWAY_IP:-172.30.85.2}"]
@@ -97,6 +99,9 @@ services:
     environment:
       VI_DEMO_OLLAMA_URL: ${VI_DEMO_OLLAMA_URL:-}
       VI_DEMO_VISION_MODEL: ${VI_DEMO_VISION_MODEL:-qwen2.5vl:3b}
+      VI_YOLO_WEIGHTS: ${VI_YOLO_WEIGHTS:-}
+    volumes:
+      - ${YOLO_MODEL_DIR:-yolo_models}:/models:ro
     command: ["uvicorn", "vi_inference.main:app", "--host", "0.0.0.0", "--port", "8001"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/live', timeout=3)"]
@@ -123,3 +128,4 @@ volumes:
   redis:
   tls:
   models:
+  yolo_models:

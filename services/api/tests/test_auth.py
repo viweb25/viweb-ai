@@ -81,3 +81,38 @@ def test_password_login_session_logout_and_rate_limit(origin):
         assert client.post(login, json=payload, headers=headers).status_code == 429
     finally:
         app.dependency_overrides.clear()
+
+
+def test_signup_requires_correct_code_and_origin(monkeypatch):
+    from vi_api.interfaces.http.controllers import auth
+
+    origin = "http://127.0.0.1:3000"
+    code = "private-signup-code-for-test"
+    calls = []
+
+    async def provision(email, organisation, password_hash):
+        assert await ScryptPasswordVerifier().verify("test signup password", password_hash)
+        calls.append((email, organisation))
+
+    monkeypatch.setattr(auth, "provision_owner", provision)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_settings,
+        lambda: Settings(app_origin=origin, signup_code=code),
+    )
+    with TestClient(app, base_url=origin) as client:
+        url = "/api/v1/auth/signup"
+        payload = {
+            "email": "OWNER@example.test",
+            "password": "test signup password",
+            "organisation": " Example Factory ",
+            "code": code,
+        }
+        assert client.post(url, json=payload).status_code == 403
+        headers = {"Origin": origin}
+        assert (
+            client.post(url, headers=headers, json={**payload, "code": "wrong"}).status_code == 403
+        )
+        assert client.post(url, headers=headers, json=payload).status_code == 204
+        assert client.get("/api/v1/auth/me").status_code == 401
+    assert calls == [("owner@example.test", "Example Factory")]
