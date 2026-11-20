@@ -26,11 +26,8 @@ coordinate frontend releases. Track the migration revision and image tags togeth
 
 ## Account signup and camera inspections
 
-In the backend server's `.env`, set `SIGNUP_CODE` to a random value generated
-with `openssl rand -hex 24`. Share it privately with users authorised to
-create a workspace. Each registration creates a new workspace and its owner.
-The code is reusable until rotated. Clear it and recreate the API container
-to disable registration.
+Users can create an account with a workspace name, email, and password. Each
+registration creates a new workspace and its owner.
 
 For YOLO, build the inference image from the standalone inference repository.
 

@@ -18,7 +18,7 @@
 		}
 	}
 	@inspection {
-		path /api/v1/demo/inspect /api/v1/demo/detect
+		path /api/v1/demo/inspect /api/v1/demo/detect /api/v1/demo/detection-model
 		header X-VI-Gateway-Key {$VI_GATEWAY_KEY}
 	}
 	handle @inspection {
