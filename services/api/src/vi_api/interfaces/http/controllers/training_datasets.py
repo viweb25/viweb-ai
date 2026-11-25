@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Annotated, Literal
@@ -32,9 +33,13 @@ class Point(BaseModel):
     y: float = Field(ge=0, le=1)
 
 
+ClassName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+
+
 class Box(BaseModel):
     start: Point
     end: Point
+    label: ClassName | None = None
 
     @model_validator(mode="after")
     def nonempty(self):
@@ -52,11 +57,18 @@ class Photo(BaseModel):
     boxes: list[Box] = Field(max_length=1000)
 
 
+class ClassInfo(BaseModel):
+    kind: Literal["good", "defect", "object"] = "object"
+    hint: str = Field(default="", max_length=120)
+
+
 class SaveDataset(BaseModel):
     part_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
     inspection_note: str = Field(max_length=400)
     revision: int = Field(ge=0)
-    photos: list[Photo] = Field(min_length=1, max_length=200)
+    photos: list[Photo] = Field(max_length=200)
+    classes: list[ClassName] | None = Field(default=None, max_length=200)
+    class_info: dict[ClassName, ClassInfo] | None = Field(default=None, max_length=200)
 
 
 def require_editor(member: Membership) -> None:
@@ -93,7 +105,7 @@ def write_image(path: Path, image: bytes) -> None:
 async def find_dataset(session: AsyncSession, org_id: UUID, dataset_id: UUID):
     row = await session.execute(
         text("""
-            SELECT id, part_name, inspection_note, revision
+            SELECT id, part_name, inspection_note, revision, classes, class_info
             FROM training_datasets WHERE id = :id AND org_id = :org_id
         """),
         {"id": dataset_id, "org_id": org_id},
@@ -107,12 +119,58 @@ async def list_datasets(member: OrgMember, response: Response):
     async with Session() as session:
         rows = await session.execute(
             text("""
-                SELECT id, part_name FROM training_datasets WHERE org_id = :org_id
-                ORDER BY updated_at DESC, id
+                SELECT d.id, d.part_name, d.classes, d.class_info, d.updated_at,
+                    (SELECT count(*) FROM training_photos p WHERE p.dataset_id = d.id) AS photo_count,
+                    (SELECT count(*) FROM training_photos p
+                        WHERE p.dataset_id = d.id AND p.reviewed) AS labeled_count,
+                    (SELECT count(*) FROM training_jobs j
+                        WHERE j.dataset_id = d.id AND j.status = 'succeeded') AS model_count,
+                    (SELECT j.status FROM training_jobs j WHERE j.dataset_id = d.id
+                        ORDER BY j.created_at DESC, j.id DESC LIMIT 1) AS latest_status
+                FROM training_datasets d WHERE d.org_id = :org_id
+                ORDER BY d.updated_at DESC, d.id
             """),
             {"org_id": member.org_id},
         )
         return [dict(row) for row in rows.mappings()]
+
+
+@router.delete("/{dataset_id}", status_code=204)
+async def delete_dataset(dataset_id: UUID, member: OrgMember, _: BrowserOrigin):
+    require_editor(member)
+    async with Session.begin() as session:
+        dataset = await session.scalar(
+            text("SELECT id FROM training_datasets WHERE id = :id AND org_id = :org FOR UPDATE"),
+            {"id": dataset_id, "org": member.org_id},
+        )
+        if dataset is None:
+            raise HTTPException(404, "Dataset not found")
+        active = await session.scalar(
+            text("""
+                SELECT 1 FROM training_jobs WHERE dataset_id = :id
+                AND status IN ('queued', 'running') LIMIT 1
+            """),
+            {"id": dataset_id},
+        )
+        if active:
+            raise HTTPException(409, "Stop the running training before deleting this project.")
+        jobs = await session.scalars(
+            text("DELETE FROM training_jobs WHERE dataset_id = :id RETURNING id"), {"id": dataset_id}
+        )
+        job_ids = list(jobs)
+        await session.execute(text("DELETE FROM training_datasets WHERE id = :id"), {"id": dataset_id})
+    await run_in_threadpool(remove_dataset_files, member.org_id, dataset_id, job_ids)
+    return Response(status_code=204)
+
+
+def remove_dataset_files(org_id: UUID, dataset_id: UUID, job_ids: list[UUID]) -> None:
+    targets = []
+    if image_root := os.getenv("VI_TRAINING_IMAGE_DIR"):
+        targets.append(Path(image_root) / str(org_id) / str(dataset_id))
+    if run_root := os.getenv("VI_TRAINING_RUN_DIR"):
+        targets.extend(Path(run_root) / str(org_id) / str(job_id) for job_id in job_ids)
+    for target in targets:
+        shutil.rmtree(target, ignore_errors=True)
 
 
 @router.put("/{dataset_id}/uploads/{photo_id}/{digest}", status_code=204)
@@ -172,6 +230,13 @@ async def save_dataset(
     if len({photo.id for photo in data.photos}) != len(data.photos):
         raise HTTPException(422, "Each photo must have a unique ID")
 
+    if data.classes is not None:
+        if len({name.casefold() for name in data.classes}) != len(data.classes):
+            raise HTTPException(422, "Each class must have a unique name.")
+        allowed = set(data.classes)
+        if any((box.label or data.part_name) not in allowed for photo in data.photos for box in photo.boxes):
+            raise HTTPException(422, "Add every existing box label to the project classes before saving.")
+
     def all_images_exist() -> bool:
         return all(
             image_path(
@@ -188,17 +253,25 @@ async def save_dataset(
         "part": data.part_name,
         "note": data.inspection_note,
         "revision": data.revision,
+        "classes": json.dumps(data.classes) if data.classes is not None else None,
+        "class_info": json.dumps({
+            name: info.model_dump() for name, info in data.class_info.items()
+            if data.classes is None or name in data.classes
+        }) if data.class_info is not None else None,
     }
     async with Session.begin() as session:
         if data.revision == 0:
             statement = """
-                INSERT INTO training_datasets (id, org_id, part_name, inspection_note)
-                VALUES (:id, :org_id, :part, :note)
+                INSERT INTO training_datasets (id, org_id, part_name, inspection_note, classes, class_info)
+                VALUES (:id, :org_id, :part, :note, COALESCE(CAST(:classes AS jsonb), '[]'::jsonb),
+                    COALESCE(CAST(:class_info AS jsonb), '{}'::jsonb))
                 ON CONFLICT (id) DO NOTHING RETURNING revision
             """
         else:
             statement = """
                 UPDATE training_datasets SET part_name = :part, inspection_note = :note,
+                    classes = COALESCE(CAST(:classes AS jsonb), classes),
+                    class_info = COALESCE(CAST(:class_info AS jsonb), class_info),
                     revision = revision + 1, updated_at = now()
                 WHERE id = :id AND org_id = :org_id AND revision = :revision RETURNING revision
             """
@@ -210,6 +283,8 @@ async def save_dataset(
         await session.execute(
             text("DELETE FROM training_photos WHERE dataset_id = :id"), {"id": dataset_id}
         )
+        if not data.photos:
+            return {"revision": revision}
         await session.execute(
             text("""
                 INSERT INTO training_photos
@@ -222,7 +297,7 @@ async def save_dataset(
                     **photo.model_dump(),
                     "dataset_id": dataset_id,
                     "position": position,
-                    "boxes": json.dumps([box.model_dump() for box in photo.boxes]),
+                    "boxes": json.dumps([box.model_dump(exclude_none=True) for box in photo.boxes]),
                 }
                 for position, photo in enumerate(data.photos)
             ],
