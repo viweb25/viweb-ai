@@ -1,12 +1,16 @@
 from typing import Annotated
 
+from anyio import to_thread
 from fastapi import APIRouter, Depends, Header, Request, Response
 from pydantic import BaseModel, Field, SecretStr
+from sqlalchemy.exc import IntegrityError
 
 from vi_api.app.identity.sign_in import SignIn, token_hash
 from vi_api.container import get_sign_in
 from vi_api.domain.identity.models import CurrentUser
 from vi_api.domain.identity.ports import SignInRateLimited, SignInRejected
+from vi_api.infrastructure.identity.passwords import LIMIT, hash_password
+from vi_api.infrastructure.identity.provision_owner import provision_owner
 from vi_api.interfaces.http.auth_configuration import app_origin, cookie_name
 from vi_api.interfaces.http.dependencies.identity import (
     SESSION_COOKIE,
@@ -36,6 +40,30 @@ def same_origin(settings: SettingsDependency, origin: Annotated[str | None, Head
 
 
 BrowserOrigin = Annotated[str, Depends(same_origin)]
+
+
+class SignupRequest(LoginRequest):
+    password: SecretStr = Field(min_length=15, max_length=128)
+    organisation: str = Field(min_length=1, max_length=200, pattern=r"\S")
+
+
+@router.post(
+    "/signup",
+    status_code=204,
+    responses={code: {"model": ErrorResponse} for code in (403, 409)},
+)
+async def signup(credentials: SignupRequest, origin: BrowserOrigin) -> None:
+    password_hash = await to_thread.run_sync(
+        hash_password, credentials.password.get_secret_value(), limiter=LIMIT
+    )
+    try:
+        await provision_owner(
+            credentials.email.lower(), credentials.organisation.strip(), password_hash
+        )
+    except IntegrityError as exc:
+        raise ApiError(
+            409, ErrorCode.SIGNUP_CONFLICT, "An account already uses this email"
+        ) from exc
 
 
 @router.post(

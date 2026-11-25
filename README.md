@@ -1,135 +1,43 @@
-# VI WebSync AI Platform
+# VI WebSync business backend
 
-Industrial AI SaaS and factory-runtime foundation for a three-person team. The target
-workflow is configure -> collect -> annotate -> train -> evaluate -> approve -> deploy
--> monitor, with independent models per inspection function and local factory operation.
+This tree is the backend-only cutover candidate for the existing viweb-ai repo.
+It owns FastAPI, identity, catalogue, database access queries and Celery. The
+database and AI repos build the independent images used by Compose.
 
-This repository is a developer foundation, not a production-ready inspection system.
-
-## Start development
-
-For a single backend startup command, see [deployment/docker-compose](deployment/docker-compose/README.md).
-The [backend code map](docs/guides/LOCAL_BACKEND.md) follows requests, migrations, and Redis jobs through the code.
-The [sign-in guide](docs/guides/SIGN_IN.md) covers identity provider setup and pgAdmin.
-
-Run backend services in Docker and the frontend separately. Requires Docker Compose
-and Node 22; Python/uv are optional for host backend development.
+Build vi-websync/db:staging and vi-websync/inference:staging from the matching
+repositories on the AI server, or set DB_MIGRATION_IMAGE and AI_RUNTIME_IMAGE
+to their published image references in .env. Copy .env.example to .env and set
+the HTTPS hostnames, gateway key and database credentials.
 
 ```bash
-cp .env.example .env
 docker compose up -d --build --wait
-npm ci
-npm run dev
+docker compose exec api python -m vi_api.infrastructure.identity.create_owner \
+  --email owner@example.test --organisation "Staging Company"
 ```
 
-Frontend: http://127.0.0.1:3000. Business API: http://127.0.0.1:8000/docs.
-AI API: http://127.0.0.1:8001/docs. PostgreSQL: `127.0.0.1:15432`.
-`make tools` starts optional pgAdmin at http://127.0.0.1:15050.
-The migration job completes before the API and worker start. Development ports bind
-only to loopback. See [developer workflow](docs/guides/DEVELOPER_WORKFLOW.md).
+Deploy the frontend from its own repository. APP_ORIGIN must match the frontend's
+HTTPS origin, and both gateways must use the same VI_GATEWAY_KEY. The business API,
+database, Redis and inference containers use private Docker networking. The public
+gateway permits sign-in, session checks, logout, signup, catalogue, liveness and inspection. Hosted
+inspection requires an active workspace membership. Example uploads use company-scoped backend access.
 
-## Repository layout
+Use the backend's OpenAPI snapshot in packages/schemas/openapi/api.json to
+coordinate frontend releases. Track the migration revision and image tags together.
 
-```text
-frontend/                      React + TypeScript, independent development server
-  src/services/api/            HTTP client and API-specific calls
-services/
-  api/src/vi_api/
-    bootstrap.py               FastAPI startup and router registration
-    container.py               Dependency composition
-    interfaces/http/           Controllers and HTTP schemas
-    app/                       Application operations (one per use case)
-    domain/                    Business models and repository protocols
-    infrastructure/            Repository implementations and SQLAlchemy models
-    config/                    Environment settings
-  inference/                   Separate AI inference backend
-  worker/                      Celery jobs and Redis messaging
-  edge-agent/                  Factory runtime simulation and future adapters
-database/
-  alembic.ini                  Migration entry point
-  migrations/versions/         Ordered schema changes
-  functions/                   Versioned PostgreSQL diagnostic functions
-  tests/                       Live-database checks
-ai/                            Function interfaces and future training implementations
-packages/schemas/              Shared OpenAPI and JSON Schema contracts
-packages/core/                 Small shared runtime primitives
-packages/labview/              Integration extension points
-infra/docker/                  Application Dockerfiles and development proxy settings
-compose.yaml                   Backend stack; optional tools/frontend/test profiles
-tests/contracts/               Cross-service schema checks
-docs/                          Architecture, workflow, AI, deployment and release gates
-```
+## Account signup and camera inspections
 
-Keep one repository for compatible contracts and easy onboarding. Applications remain
-separate processes/images. Heavy AI dependencies must remain outside the business API.
+Users can create an account with a workspace name, email, and password. Each
+registration creates a new workspace and its owner.
 
-## Validation
+For YOLO, build the inference image from the standalone inference repository.
 
 ```bash
-make docker-check
-make docker-contracts
-make docker-ping
-npm run typecheck
-npm run build
+docker build --target yolo -t vi-websync/inference:staging /path/to/viweb-inference
 ```
 
-Host development: `make install`, `make check`, `make contracts`.
-CI checks Python, frontend, API snapshot, migrations and database functions.
-Actual results and limitations: [validation](docs/releases/FOUNDATION_VALIDATION.md).
-
-## What exists
-
-The API exposes a public static catalogue through controller/operation/domain/repository layers,
-process liveness and migration-aware DB readiness. The frontend calls the API through
-service modules. Compose defines PostgreSQL, Redis, migration, API, AI API and worker
-containers. Celery has a health task. Ten SQL diagnostics support database inspection.
-The AI API explicitly returns model-unavailable; edge simulation preserves HOLD.
-
-There is no login, tenant resource workflow, durable customer-job/outbox implementation,
-annotation, real training, approved model package, PLC output, durable edge sync,
-billing or provisioned cloud environment. Catalogue entries are planned capabilities.
-
-## Design and delivery guides
-
-- [Backend layers and feature implementation](services/api/README.md)
-- [Distributed system, service boundaries and reliable jobs](docs/architecture/DISTRIBUTED_SYSTEM.md)
-- [AI integration, training, evaluation and deployment](docs/guides/AI_LIFECYCLE.md)
-- [Database, migrations, SQL functions and pgAdmin](database/README.md)
-- [Cloud deployment plan and release gates](docs/runbooks/CLOUD_DEPLOYMENT.md)
-- [v0.1 foundation checklist](docs/releases/V0_1_FOUNDATION.md)
-- [Product](docs/product/PRODUCT.md), [architecture](docs/architecture/ARCHITECTURE.md),
-  [team ownership](docs/guides/TEAM.md)
-
-Imported source documents and archived starter instructions are preserved as reference.
-Historical handbook/planning exports can describe the previous layout; this README
-and the current developer workflow are the active setup instructions.
-
-## Local visual inspection demo
-
-Start the local Qwen vision-language model and download its weights once while online.
-
-```bash
-make setup
-docker compose --profile vision up -d ollama
-docker compose exec ollama ollama pull qwen2.5vl:3b
-VI_DEMO_OLLAMA_URL=http://ollama:11434 docker compose --profile vision --profile frontend up -d --build --wait
-```
-
-Open http://127.0.0.1:3000, capture or choose a photo, enter the acceptance rule,
-and click **Inspect image**. The model receives the image and rule on the local Docker
-network. The downloaded weights live in the `ollama_models` volume. CPU performance
-depends on the demo laptop. Check known good, known defective, and unclear images before
-presenting, then rehearse with the internet disconnected. After the first build and
-model download, restart without building or pulling images.
-
-```bash
-VI_DEMO_OLLAMA_URL=http://ollama:11434 docker compose --profile vision --profile frontend up -d --no-build --pull never --wait
-```
-
-### Collect examples for a dedicated model
-
-To enable the optional **Collect training examples** panel, also set
-`VI_DEMO_IMAGE_DIR=/var/lib/viweb-demo` when starting the stack. Enter a physical
-part ID and save the operator label. PostgreSQL stores the metadata, and the
-`demoimages` volume stores the JPEGs. The demo workspace is shared locally and has no
-sign-in. Use practice photos.
+Put the trained `best.pt` in a directory readable by container UID 10001.
+Set `YOLO_MODEL_DIR` to that absolute host directory and `VI_YOLO_WEIGHTS` to
+`/models/best.pt` in the backend `.env`. Restart the inference container after replacing
+weights. Use the `vision` Compose profile with the configured Ollama model for Qwen.
+Both gateways route JPEGs through the business API, which checks the session and origin
+before forwarding them to private inference.
