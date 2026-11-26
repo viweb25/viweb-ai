@@ -14,6 +14,9 @@ from vi_api.app.health.check_readiness import CheckReadiness
 from vi_api.app.identity.sign_in import SignIn
 from vi_api.app.identity.sign_up import SignUp
 from vi_api.app.inspection.inspection_service import InspectionService
+from vi_api.app.inspection_programs.program_service import ProgramService
+from vi_api.app.inspection_programs.run_service import RunService
+from vi_api.app.modules.list_modules import ListModules
 from vi_api.app.training.dataset_service import DatasetService
 from vi_api.app.training.job_service import TrainingJobService
 from vi_api.app.workspaces.workspace_service import WorkspaceService
@@ -31,9 +34,14 @@ from vi_api.infrastructure.repository.accounts import PostgresAccountRepository
 from vi_api.infrastructure.repository.catalogue import JsonCatalogueRepository
 from vi_api.infrastructure.repository.demo_examples import PostgresDemoExampleRepository
 from vi_api.infrastructure.repository.identity import PostgresIdentityRepository
+from vi_api.infrastructure.repository.inspection_programs import (
+    PostgresProgramRepository,
+    PostgresRunRepository,
+)
 from vi_api.infrastructure.repository.training_datasets import PostgresDatasetRepository
 from vi_api.infrastructure.repository.training_jobs import PostgresTrainingJobRepository
 from vi_api.infrastructure.repository.workspaces import PostgresWorkspaceRepository
+from vi_api.infrastructure.storage.run_images import LocalRunImageStore
 from vi_api.infrastructure.storage.training_files import LocalTrainingFileStore
 from vi_api.interfaces.http.errors import ApiError, ErrorCode
 
@@ -132,3 +140,28 @@ def get_inspection_service(inference: InferenceClient) -> InspectionService:
 
 def get_workspace_service() -> WorkspaceService:
     return WorkspaceService(PostgresWorkspaceRepository(Session))
+
+
+def get_run_images(settings: SettingsDependency) -> LocalRunImageStore:
+    return LocalRunImageStore(settings.training_image_dir)
+
+
+RunImages = Annotated[LocalRunImageStore, Depends(get_run_images)]
+
+
+def get_program_service(
+    files: TrainingFiles, inference: InferenceClient, images: RunImages
+) -> ProgramService:
+    return ProgramService(PostgresProgramRepository(Session), files, inference, images)
+
+
+def get_run_service(
+    files: TrainingFiles, inference: InferenceClient, images: RunImages
+) -> RunService:
+    return RunService(
+        PostgresProgramRepository(Session), PostgresRunRepository(Session), images, files, inference
+    )
+
+
+def get_list_modules() -> ListModules:
+    return ListModules()

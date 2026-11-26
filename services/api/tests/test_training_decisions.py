@@ -24,7 +24,8 @@ def test_competing_labels_do_not_count_one_part_twice():
         detection("Clip", right),
         detection("Clip", (0.52, 0.52, 0.90, 0.90)),
     ]
-    assert evaluate_parts(expected, resolve_label_conflicts(snapshot, expected, complete))["decision"] == "PASS"
+    resolved = resolve_label_conflicts(snapshot, expected, complete)
+    assert evaluate_parts(expected, resolved)["decision"] == "PASS"
     assert evaluate_parts(
         expected, resolve_label_conflicts(snapshot, expected, left_predictions)
     )["decision"] == "FAIL"
@@ -49,7 +50,9 @@ def test_training_options_accept_presets_and_model_sizes():
     from pydantic import ValidationError
     from vi_api.interfaces.http.schemas.training import TrainingOptions
 
-    options = TrainingOptions(preset="accurate", model_size="s", copy_paste=0.2, iou=0.6, max_det=100)
+    options = TrainingOptions(
+        preset="accurate", model_size="s", copy_paste=0.2, iou=0.6, max_det=100
+    )
     assert options.preset == "accurate" and options.model_size == "s"
     assert TrainingOptions().model_size == "n" and TrainingOptions().erasing == 0.4
     for invalid in ({"model_size": "xl"}, {"preset": "turbo"}, {"iou": 1.5}, {"max_det": 0}):

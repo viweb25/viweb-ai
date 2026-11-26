@@ -3,6 +3,10 @@ import asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+# The schema revision (viweb-db Alembic head) this API release is written for.
+# Bump it together with each new migration; the API reports "not ready" until it matches.
+REQUIRED_SCHEMA_REVISION = "0011"
+
 
 class DatabaseReadinessRepository:
     def __init__(self, engine: AsyncEngine):
@@ -15,6 +19,6 @@ class DatabaseReadinessRepository:
                     revision = await connection.scalar(
                         text("SELECT version_num FROM alembic_version")
                     )
-                    return revision == "0010"
+                    return revision == REQUIRED_SCHEMA_REVISION
         except Exception:
             return False
