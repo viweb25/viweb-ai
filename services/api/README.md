@@ -57,6 +57,21 @@ DatabaseReadinessRepository. The SQL and timeout handling stay in infrastructure
 5. Add HTTP schemas/controllers under `interfaces/http/`; register the router in bootstrap.
 6. Add operation, repository and HTTP tests; regenerate/check OpenAPI with consumers.
 
+Every feature follows this layout: identity (sign-in, sign-up), workspaces,
+inspection, training datasets and training jobs. For example, training uses
+`controllers/training_datasets.py` -> `app/training/dataset_service.py` ->
+`domain/training/ports.py` -> `infrastructure/repository/training_datasets.py`,
+with pure business rules in `domain/training/policies.py`. Photo files and trainer
+output go through `infrastructure/storage/training_files.py`, and calls to the
+inference service go through `infrastructure/inference/client.py`.
+
+Services and repositories raise errors from `domain/errors.py` (`NotFound`,
+`Conflict`, `InvalidInput`, `PermissionDenied`, `Unavailable`). One handler in
+`interfaces/http/errors.py` maps them to HTTP statuses and the
+`{"error": {"code", "message"}}` envelope. Unexpected errors return a generic 500
+and are logged with the request's `X-Request-ID`. `test_architecture.py` fails if a
+controller imports SQLAlchemy, httpx or infrastructure code directly.
+
 Before customer resources, implement verified identity, membership and roles. Pass
 verified tenant context into operations and require it in every tenant repository query.
 Never trust a request-supplied organisation ID alone. Add cross-tenant rejection tests.

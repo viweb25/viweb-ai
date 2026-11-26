@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Request
+from fastapi import Depends, Header, Request
 
 from vi_api.app.identity.sign_in import token_hash
 from vi_api.config.settings import Settings
@@ -40,3 +40,18 @@ def require_organisation_access(
     if membership is None:
         raise ApiError(403, ErrorCode.ORGANISATION_ACCESS_DENIED, "Organisation access denied")
     return membership
+
+
+def same_origin(
+    settings: SettingsDependency, origin: Annotated[str | None, Header()] = None
+) -> str:
+    """Reject state-changing browser requests from other sites (CSRF defence)."""
+    expected = app_origin(settings)
+    if origin != expected:
+        raise ApiError(403, ErrorCode.INVALID_REQUEST_ORIGIN, "Request origin is not allowed")
+    return expected
+
+
+BrowserOrigin = Annotated[str, Depends(same_origin)]
+OrgMember = Annotated[Membership, Depends(require_organisation_access)]
+CurrentUserDependency = Annotated[CurrentUser, Depends(get_current_user)]

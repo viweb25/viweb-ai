@@ -1,4 +1,4 @@
-from vi_api.interfaces.http.controllers.training_jobs import evaluate_parts, resolve_label_conflicts
+from vi_api.domain.training.policies import evaluate_parts, resolve_label_conflicts
 
 
 def detection(label, bounds):
@@ -47,8 +47,7 @@ def test_nested_parts_and_spatially_distinct_extras_are_retained():
 def test_training_options_accept_presets_and_model_sizes():
     import pytest
     from pydantic import ValidationError
-
-    from vi_api.interfaces.http.controllers.training_jobs import TrainingOptions
+    from vi_api.interfaces.http.schemas.training import TrainingOptions
 
     options = TrainingOptions(preset="accurate", model_size="s", copy_paste=0.2, iou=0.6, max_det=100)
     assert options.preset == "accurate" and options.model_size == "s"

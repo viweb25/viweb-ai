@@ -32,7 +32,6 @@ def test_inspection_forwards_frame_and_query(monkeypatch):
 
     import httpx
     from vi_api.domain.identity.models import CurrentUser, Membership
-    from vi_api.interfaces.http.controllers import inspection
     from vi_api.interfaces.http.dependencies.identity import get_current_user
 
     user = CurrentUser(uuid4(), "Operator", None, [Membership(uuid4(), "Factory", "operator")])
@@ -44,7 +43,7 @@ def test_inspection_forwards_frame_and_query(monkeypatch):
         assert kwargs["content"] == b"frame"
         return httpx.Response(200, json={"decision": "PASS"})
 
-    monkeypatch.setattr(inspection.httpx.AsyncClient, "post", post)
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
     response = client.post(
         "/api/v1/demo/detect?target=cap&expected_count=6",
         headers={"Origin": "http://127.0.0.1:3000", "Content-Type": "image/jpeg"},

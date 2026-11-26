@@ -36,3 +36,20 @@ def test_inner_layers_do_not_import_frameworks_or_infrastructure(layer):
                 assert not any(
                     module == item or module.startswith(item + ".") for item in forbidden
                 ), f"{path.relative_to(ROOT)} imports {module}, violating layer boundaries"
+
+
+def test_controllers_use_services_instead_of_database_or_http_clients():
+    forbidden = ("sqlalchemy", "httpx", "vi_api.infrastructure")
+    for path in (ROOT / "interfaces/http/controllers").glob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                modules = [node.module]
+            elif isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            else:
+                continue
+            for module in modules:
+                assert not any(
+                    module == item or module.startswith(item + ".") for item in forbidden
+                ), f"controller {path.name} imports {module}; move it behind a service"

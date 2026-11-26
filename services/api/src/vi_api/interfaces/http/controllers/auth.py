@@ -1,22 +1,19 @@
 from typing import Annotated
 
-from anyio import to_thread
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field, SecretStr
-from sqlalchemy.exc import IntegrityError
 
 from vi_api.app.identity.sign_in import SignIn, token_hash
-from vi_api.container import get_sign_in
+from vi_api.app.identity.sign_up import SignUp
+from vi_api.container import get_sign_in, get_sign_up
 from vi_api.domain.identity.models import CurrentUser
 from vi_api.domain.identity.ports import SignInRateLimited, SignInRejected
-from vi_api.infrastructure.identity.passwords import LIMIT, hash_password
-from vi_api.infrastructure.identity.provision_owner import provision_owner
-from vi_api.interfaces.http.auth_configuration import app_origin, cookie_name
+from vi_api.interfaces.http.auth_configuration import cookie_name
 from vi_api.interfaces.http.dependencies.identity import (
     SESSION_COOKIE,
+    BrowserOrigin,
     IdentityRepo,
     SessionToken,
-    SettingsDependency,
     get_current_user,
 )
 from vi_api.interfaces.http.errors import ApiError, ErrorCode
@@ -25,21 +22,12 @@ from vi_api.interfaces.http.schemas.errors import ErrorResponse
 router = APIRouter(prefix="/api/v1/auth", tags=["Identity"])
 SESSION_TTL = 8 * 60 * 60
 SignInDependency = Annotated[SignIn, Depends(get_sign_in)]
+SignUpDependency = Annotated[SignUp, Depends(get_sign_up)]
 
 
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254, pattern=r"^[^\s@]+@[^\s@]+$")
     password: SecretStr = Field(min_length=1, max_length=128)
-
-
-def same_origin(settings: SettingsDependency, origin: Annotated[str | None, Header()] = None):
-    expected = app_origin(settings)
-    if origin != expected:
-        raise ApiError(403, ErrorCode.INVALID_REQUEST_ORIGIN, "Request origin is not allowed")
-    return expected
-
-
-BrowserOrigin = Annotated[str, Depends(same_origin)]
 
 
 class SignupRequest(LoginRequest):
@@ -52,18 +40,12 @@ class SignupRequest(LoginRequest):
     status_code=204,
     responses={code: {"model": ErrorResponse} for code in (403, 409)},
 )
-async def signup(credentials: SignupRequest, origin: BrowserOrigin) -> None:
-    password_hash = await to_thread.run_sync(
-        hash_password, credentials.password.get_secret_value(), limiter=LIMIT
+async def signup(
+    credentials: SignupRequest, sign_up: SignUpDependency, origin: BrowserOrigin
+) -> None:
+    await sign_up.execute(
+        credentials.email, credentials.password.get_secret_value(), credentials.organisation
     )
-    try:
-        await provision_owner(
-            credentials.email.lower(), credentials.organisation.strip(), password_hash
-        )
-    except IntegrityError as exc:
-        raise ApiError(
-            409, ErrorCode.SIGNUP_CONFLICT, "An account already uses this email"
-        ) from exc
 
 
 @router.post(

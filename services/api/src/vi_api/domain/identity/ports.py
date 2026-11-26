@@ -16,6 +16,17 @@ class PasswordVerifier(Protocol):
     async def verify(self, password: str, stored_hash: str | None) -> bool: ...
 
 
+class PasswordHasher(Protocol):
+    async def hash(self, password: str) -> str: ...
+
+
+class AccountRepository(Protocol):
+    async def provision_owner(
+        self, email: str, organisation: str, password_hash: str
+    ) -> tuple[UUID, UUID]:
+        """Create the workspace and its owner. Raises Conflict for a used email."""
+
+
 class IdentityRepository(Protocol):
     async def record_sign_in_attempt(self, bucket: bytes) -> int: ...
 
