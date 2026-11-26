@@ -16,6 +16,11 @@ def hash_password(password: str) -> str:
     return f"{salt.hex()}:{derive(password, salt).hex()}"
 
 
+class ScryptPasswordHasher:
+    async def hash(self, password: str) -> str:
+        return await to_thread.run_sync(hash_password, password, limiter=LIMIT)
+
+
 class ScryptPasswordVerifier:
     async def verify(self, password: str, stored_hash: str | None) -> bool:
         salt, digest = (stored_hash or DUMMY_HASH).split(":")

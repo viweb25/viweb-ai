@@ -84,16 +84,23 @@ def test_password_login_session_logout_and_rate_limit(origin):
 
 
 def test_signup_creates_owner_with_valid_origin(monkeypatch):
-    from vi_api.interfaces.http.controllers import auth
+    from vi_api.app.identity.sign_up import SignUp
+    from vi_api.container import get_sign_up
+    from vi_api.infrastructure.identity.passwords import ScryptPasswordHasher
 
     origin = "http://127.0.0.1:3000"
     calls = []
 
-    async def provision(email, organisation, password_hash):
-        assert await ScryptPasswordVerifier().verify("test signup password", password_hash)
-        calls.append((email, organisation))
+    class FakeAccounts:
+        async def provision_owner(self, email, organisation, password_hash):
+            assert await ScryptPasswordVerifier().verify("test signup password", password_hash)
+            calls.append((email, organisation))
 
-    monkeypatch.setattr(auth, "provision_owner", provision)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_sign_up,
+        lambda: SignUp(FakeAccounts(), ScryptPasswordHasher()),
+    )
     monkeypatch.setitem(
         app.dependency_overrides,
         get_settings,
