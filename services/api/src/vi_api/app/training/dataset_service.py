@@ -41,8 +41,7 @@ class DatasetService:
 
     async def delete(self, member: Membership, dataset_id: UUID) -> None:
         policies.require_editor(member)
-        job_ids = await self.datasets.delete_idle(member.org_id, dataset_id)
-        await self.files.remove_dataset(member.org_id, dataset_id, job_ids)
+        await self.datasets.archive_idle(member.org_id, dataset_id)
 
     async def upload_photo(
         self,

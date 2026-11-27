@@ -1,11 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from pydantic import BaseModel, Field, SecretStr
 
+from vi_api.app.identity.account_links import AccountLinks
 from vi_api.app.identity.sign_in import SignIn, token_hash
 from vi_api.app.identity.sign_up import SignUp
-from vi_api.container import get_sign_in, get_sign_up
+from vi_api.container import get_account_links, get_sign_in, get_sign_up
 from vi_api.domain.identity.models import CurrentUser
 from vi_api.domain.identity.ports import SignInRateLimited, SignInRejected
 from vi_api.interfaces.http.auth_configuration import cookie_name
@@ -17,12 +18,18 @@ from vi_api.interfaces.http.dependencies.identity import (
     get_current_user,
 )
 from vi_api.interfaces.http.errors import ApiError, ErrorCode
+from vi_api.interfaces.http.schemas.account_links import (
+    AcceptInvitation,
+    RecoveryRequest,
+    ResetPassword,
+)
 from vi_api.interfaces.http.schemas.errors import ErrorResponse
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Identity"])
 SESSION_TTL = 8 * 60 * 60
 SignInDependency = Annotated[SignIn, Depends(get_sign_in)]
 SignUpDependency = Annotated[SignUp, Depends(get_sign_up)]
+Links = Annotated[AccountLinks, Depends(get_account_links)]
 
 
 class LoginRequest(BaseModel):
@@ -33,6 +40,56 @@ class LoginRequest(BaseModel):
 class SignupRequest(LoginRequest):
     password: SecretStr = Field(min_length=15, max_length=128)
     organisation: str = Field(min_length=1, max_length=200, pattern=r"\S")
+
+
+def account_link_source(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+@router.post("/invitations/accept", status_code=204)
+async def accept_invitation(
+    data: AcceptInvitation, request: Request, service: Links, _: BrowserOrigin,
+) -> None:
+    try:
+        await service.accept(
+            data.token.get_secret_value(),
+            data.password.get_secret_value() if data.password else None,
+            account_link_source(request),
+        )
+    except SignInRateLimited as exc:
+        raise ApiError(
+            429, ErrorCode.SIGN_IN_RATE_LIMITED, "Too many attempts. Try again later."
+        ) from exc
+
+
+@router.post("/password/recovery", status_code=204)
+async def request_password_recovery(
+    data: RecoveryRequest, request: Request, background: BackgroundTasks,
+    service: Links, _: BrowserOrigin,
+) -> None:
+    try:
+        delivery = await service.request_reset(data.email, account_link_source(request))
+    except SignInRateLimited as exc:
+        raise ApiError(
+            429, ErrorCode.SIGN_IN_RATE_LIMITED, "Too many attempts. Try again later."
+        ) from exc
+    if delivery:
+        background.add_task(service.deliver_reset, *delivery)
+
+
+@router.post("/password/reset", status_code=204)
+async def reset_password(
+    data: ResetPassword, request: Request, service: Links, _: BrowserOrigin,
+) -> None:
+    try:
+        await service.reset(
+            data.token.get_secret_value(), data.password.get_secret_value(),
+            account_link_source(request),
+        )
+    except SignInRateLimited as exc:
+        raise ApiError(
+            429, ErrorCode.SIGN_IN_RATE_LIMITED, "Too many attempts. Try again later."
+        ) from exc
 
 
 @router.post(

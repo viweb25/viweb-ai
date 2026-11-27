@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from vi_api.domain.errors import Conflict, NotFound
 from vi_api.domain.inspection_programs.models import (
     DatasetContext,
+    JsonObject,
     Program,
     ProgramDraft,
     ProgramSummary,
@@ -30,12 +31,14 @@ MAX_DATASET_PHOTOS = 200
 
 PROGRAM_COLUMNS = """
     p.id, p.name, p.dataset_id, p.model_job_id, p.confidence, p.review_margin, p.revision,
-    p.updated_at
+    p.updated_at, p.published_revision
 """
 RUN_COLUMNS = """
     r.id, r.program_id, r.model_job_id, r.decision, r.zone_results, r.detections, r.confidence,
-    r.image_digest, r.created_by, r.review_status, r.created_at, p.name AS program_name,
-    p.dataset_id, r.review_note, r.reviewed_at, r.sent_to_dataset_at
+    r.image_digest, r.created_by, r.review_status, r.created_at,
+    COALESCE(r.program_snapshot ->> 'name', p.name) AS program_name,
+    p.dataset_id, r.review_note, r.reviewed_at, r.sent_to_dataset_at, r.program_snapshot,
+    d.archived_at IS NOT NULL AS dataset_archived
 """
 
 
@@ -58,12 +61,15 @@ class PostgresProgramRepository:
             rows = await session.execute(
                 text("""
                     SELECT p.id, p.name, p.dataset_id, d.part_name AS dataset_name,
-                        p.model_job_id, p.updated_at,
+                        p.model_job_id, p.updated_at, p.published_revision,
+                        v.snapshot ->> 'name' AS published_name,
                         (SELECT count(*) FROM inspection_zones z
                             WHERE z.program_id = p.id) AS zone_count,
                         r.run_count, r.pass_count, r.pending_reviews, r.last_run_at
                     FROM inspection_programs p
                     JOIN training_datasets d ON d.id = p.dataset_id
+                    LEFT JOIN inspection_program_versions v
+                      ON v.program_id = p.id AND v.revision = p.published_revision
                     LEFT JOIN LATERAL (
                         SELECT count(*) AS run_count,
                             count(*) FILTER (WHERE decision = 'PASS') AS pass_count,
@@ -71,7 +77,7 @@ class PostgresProgramRepository:
                             max(created_at) AS last_run_at
                         FROM inspection_runs WHERE program_id = p.id
                     ) r ON true
-                    WHERE p.org_id = :org_id
+                    WHERE p.org_id = :org_id AND p.archived_at IS NULL AND d.archived_at IS NULL
                     ORDER BY p.updated_at DESC, p.id
                 """),
                 {"org_id": org_id},
@@ -84,7 +90,8 @@ class PostgresProgramRepository:
                 text("""
                     INSERT INTO inspection_programs (org_id, dataset_id, name)
                     SELECT :org_id, d.id, :name FROM training_datasets d
-                    WHERE d.id = :dataset_id AND d.org_id = :org_id
+                    WHERE d.id = :dataset_id AND d.org_id = :org_id AND d.archived_at IS NULL
+                    FOR SHARE
                     RETURNING id
                 """),
                 {"org_id": org_id, "dataset_id": dataset_id, "name": name},
@@ -96,7 +103,8 @@ class PostgresProgramRepository:
         return program
 
     async def get(self, org_id: UUID, program_id: UUID) -> Program | None:
-        async with self.sessions() as session:
+        async with self.sessions.begin() as session:
+            await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
             return await self._find(session, org_id, program_id)
 
     async def save(self, org_id: UUID, program_id: UUID, draft: ProgramDraft) -> int:
@@ -107,6 +115,11 @@ class PostgresProgramRepository:
                         confidence = :confidence, review_margin = :review_margin,
                         revision = revision + 1, updated_at = now()
                     WHERE id = :id AND org_id = :org_id AND revision = :revision
+                      AND archived_at IS NULL AND EXISTS (
+                          SELECT 1 FROM training_datasets d
+                          WHERE d.id = inspection_programs.dataset_id AND d.archived_at IS NULL
+                          FOR SHARE
+                      )
                     RETURNING revision
                 """),
                 {
@@ -154,32 +167,103 @@ class PostgresProgramRepository:
                 )
         return revision
 
-    async def delete(self, org_id: UUID, program_id: UUID) -> list[UUID]:
+    async def publication(
+        self, org_id: UUID, program_id: UUID, revision: int | None = None
+    ) -> tuple[UUID, JsonObject] | None:
+        async with self.sessions() as session:
+            result = await session.execute(
+                text("""
+                    SELECT v.model_job_id, v.snapshot FROM inspection_programs p
+                    JOIN training_datasets d ON d.id = p.dataset_id
+                    JOIN inspection_program_versions v
+                      ON v.program_id = p.id
+                     AND v.revision = COALESCE(:revision, p.published_revision)
+                    WHERE p.id = :id AND p.org_id = :org
+                      AND p.archived_at IS NULL AND d.archived_at IS NULL
+                """),
+                {"id": program_id, "org": org_id, "revision": revision},
+            )
+            row = result.one_or_none()
+            return (row.model_job_id, row.snapshot) if row else None
+
+    async def versions(self, org_id: UUID, program_id: UUID) -> list[int]:
+        async with self.sessions() as session:
+            result = await session.scalars(
+                text("""
+                    SELECT v.revision FROM inspection_program_versions v
+                    JOIN inspection_programs p ON p.id = v.program_id
+                    JOIN training_datasets d ON d.id = p.dataset_id
+                    WHERE p.id = :id AND p.org_id = :org
+                      AND p.archived_at IS NULL AND d.archived_at IS NULL
+                    ORDER BY v.revision DESC
+                """),
+                {"id": program_id, "org": org_id},
+            )
+            return list(result)
+
+    async def activate(
+        self, org_id: UUID, program_id: UUID, revision: int,
+        model_job_id: UUID | None = None, snapshot: JsonObject | None = None,
+    ) -> None:
+        ids = {"id": program_id, "org": org_id, "revision": revision}
+        async with self.sessions.begin() as session:
+            current = await session.scalar(
+                text("""
+                    SELECT p.revision FROM inspection_programs p
+                    JOIN training_datasets d ON d.id = p.dataset_id
+                    WHERE p.id = :id AND p.org_id = :org
+                      AND p.archived_at IS NULL AND d.archived_at IS NULL
+                    FOR UPDATE OF p FOR SHARE OF d
+                """),
+                ids,
+            )
+            if current is None:
+                raise NotFound(PROGRAM_NOT_FOUND, "program_not_found")
+            if snapshot is not None:
+                if current != revision:
+                    raise Conflict("Reopen the latest draft before publishing.", "stale_revision")
+                await session.execute(
+                    text("""
+                        INSERT INTO inspection_program_versions
+                            (program_id, revision, model_job_id, snapshot)
+                        VALUES (:id, :revision, :model, CAST(:snapshot AS jsonb))
+                        ON CONFLICT (program_id, revision) DO NOTHING
+                    """),
+                    {**ids, "model": model_job_id, "snapshot": json.dumps(snapshot)},
+                )
+            active = await session.scalar(
+                text("""
+                    UPDATE inspection_programs SET published_revision = :revision
+                    WHERE id = :id AND EXISTS (
+                        SELECT 1 FROM inspection_program_versions
+                        WHERE program_id = :id AND revision = :revision
+                    )
+                    RETURNING published_revision
+                """),
+                ids,
+            )
+            if active is None:
+                raise NotFound("Published revision not found.", "version_not_found")
+
+    async def archive(self, org_id: UUID, program_id: UUID) -> None:
         async with self.sessions.begin() as session:
             found = await session.scalar(
                 text("""
-                    SELECT id FROM inspection_programs
-                    WHERE id = :id AND org_id = :org_id FOR UPDATE
+                    UPDATE inspection_programs SET archived_at = COALESCE(archived_at, now())
+                    WHERE id = :id AND org_id = :org_id
+                    RETURNING id
                 """),
                 {"id": program_id, "org_id": org_id},
             )
             if found is None:
                 raise NotFound(PROGRAM_NOT_FOUND, "program_not_found")
-            run_ids = await session.scalars(
-                text("SELECT id FROM inspection_runs WHERE program_id = :id"), {"id": program_id}
-            )
-            deleted = list(run_ids)
-            await session.execute(
-                text("DELETE FROM inspection_programs WHERE id = :id"), {"id": program_id}
-            )
-        return deleted
 
     async def dataset_context(self, org_id: UUID, dataset_id: UUID) -> DatasetContext | None:
         async with self.sessions() as session:
             result = await session.execute(
                 text("""
                     SELECT part_name, classes, class_info FROM training_datasets
-                    WHERE id = :id AND org_id = :org_id
+                    WHERE id = :id AND org_id = :org_id AND archived_at IS NULL
                 """),
                 {"id": dataset_id, "org_id": org_id},
             )
@@ -202,7 +286,7 @@ class PostgresProgramRepository:
                     SELECT 1 FROM training_jobs j
                     JOIN training_datasets d ON d.id = j.dataset_id
                     WHERE j.id = :job_id AND j.dataset_id = :dataset_id
-                      AND d.org_id = :org_id AND j.status = 'succeeded'
+                      AND d.org_id = :org_id AND d.archived_at IS NULL AND j.status = 'succeeded'
                 """),
                 {"job_id": job_id, "dataset_id": dataset_id, "org_id": org_id},
             )
@@ -213,7 +297,9 @@ class PostgresProgramRepository:
         result = await session.execute(
             text(
                 f"SELECT {PROGRAM_COLUMNS} FROM inspection_programs p "
-                "WHERE p.id = :id AND p.org_id = :org_id"
+                "JOIN training_datasets d ON d.id = p.dataset_id "
+                "WHERE p.id = :id AND p.org_id = :org_id "
+                "AND p.archived_at IS NULL AND d.archived_at IS NULL"
             ),
             {"id": program_id, "org_id": org_id},
         )
@@ -240,14 +326,19 @@ class PostgresRunRepository:
                 text("""
                     INSERT INTO inspection_runs
                         (id, org_id, program_id, model_job_id, decision, zone_results,
-                         detections, confidence, image_digest, created_by, review_status)
+                         detections, confidence, image_digest, created_by, review_status,
+                         program_snapshot)
                     SELECT :id, :org_id, p.id, :model_job_id, :decision,
                         CAST(:zone_results AS jsonb), CAST(:detections AS jsonb), :confidence,
-                        :image_digest, :created_by, :review_status
+                        :image_digest, :created_by, :review_status, CAST(:program_snapshot AS jsonb)
                     FROM inspection_programs p WHERE p.id = :program_id AND p.org_id = :org_id
                     RETURNING created_at
                 """),
                 {
+                    "program_snapshot": (
+                        json.dumps(run.program_snapshot)
+                        if run.program_snapshot is not None else None
+                    ),
                     "id": run.id,
                     "org_id": org_id,
                     "program_id": run.program_id,
@@ -271,8 +362,13 @@ class PostgresRunRepository:
                 text(f"""
                     SELECT {RUN_COLUMNS}
                     FROM inspection_runs r JOIN inspection_programs p ON p.id = r.program_id
+                    JOIN training_datasets d ON d.id = p.dataset_id
                     WHERE r.org_id = :org_id
                       AND (CAST(:program_id AS uuid) IS NULL OR r.program_id = :program_id)
+                      AND (CAST(:from_at AS timestamptz) IS NULL OR r.created_at >= :from_at)
+                      AND (CAST(:until_at AS timestamptz) IS NULL OR r.created_at < :until_at)
+                      AND (CAST(:before_at AS timestamptz) IS NULL OR
+                           (r.created_at, r.id) < (:before_at, CAST(:before_id AS uuid)))
                       AND (CAST(:decision AS text) IS NULL OR r.decision = :decision)
                       AND (CAST(:review_status AS text) IS NULL
                            OR r.review_status = :review_status)
@@ -285,9 +381,29 @@ class PostgresRunRepository:
                     "decision": filters.decision,
                     "review_status": filters.review_status,
                     "limit": filters.limit,
+                    "from_at": filters.from_at,
+                    "until_at": filters.until_at,
+                    "before_at": filters.before_at,
+                    "before_id": filters.before_id,
                 },
             )
             return [Run(**row) for row in rows.mappings()]
+
+    async def program_options(self, org_id: UUID) -> list[tuple[UUID, str]]:
+        async with self.sessions() as session:
+            result = await session.execute(
+                text("""
+                    SELECT p.id, p.name
+                    FROM inspection_programs p
+                    WHERE p.org_id = :org_id AND EXISTS (
+                        SELECT 1 FROM inspection_runs r
+                        WHERE r.program_id = p.id AND r.org_id = :org_id
+                    )
+                    ORDER BY lower(p.name), p.id
+                """),
+                {"org_id": org_id},
+            )
+            return [(row.id, row.name) for row in result]
 
     async def get(self, org_id: UUID, run_id: UUID) -> Run | None:
         async with self.sessions() as session:
@@ -295,6 +411,7 @@ class PostgresRunRepository:
                 text(f"""
                     SELECT {RUN_COLUMNS}
                     FROM inspection_runs r JOIN inspection_programs p ON p.id = r.program_id
+                    JOIN training_datasets d ON d.id = p.dataset_id
                     WHERE r.id = :id AND r.org_id = :org_id
                 """),
                 {"id": run_id, "org_id": org_id},
@@ -343,15 +460,20 @@ class PostgresRunRepository:
             if row["sent_to_dataset_at"] is not None:
                 raise Conflict("This photo is already in the project.", "already_sent")
             dataset_id = row["dataset_id"]
-            await session.execute(
-                text("SELECT 1 FROM training_datasets WHERE id = :id FOR UPDATE"),
-                {"id": dataset_id},
+            active = await session.scalar(
+                text("""
+                    SELECT 1 FROM training_datasets
+                    WHERE id = :id AND org_id = :org_id AND archived_at IS NULL FOR UPDATE
+                """),
+                {"id": dataset_id, "org_id": org_id},
             )
+            if active is None:
+                raise Conflict("The project is archived.", "dataset_archived")
             count = await session.scalar(
                 text("""
                     SELECT count(*) FROM training_photos p
                     JOIN training_datasets d ON d.id = p.dataset_id
-                    WHERE d.id = :dataset_id AND d.org_id = :org_id
+                    WHERE d.id = :dataset_id AND d.org_id = :org_id AND d.archived_at IS NULL
                 """),
                 {"dataset_id": dataset_id, "org_id": org_id},
             )

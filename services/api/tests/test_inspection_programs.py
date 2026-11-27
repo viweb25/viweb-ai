@@ -25,6 +25,7 @@ from vi_api.domain.inspection_programs.models import (
     Run,
     RunFilter,
     Zone,
+    program_snapshot,
 )
 from vi_api.interfaces.http.dependencies.identity import get_current_user
 
@@ -159,11 +160,17 @@ def test_detection_floor_and_parsing():
 class FakePrograms:
     def __init__(self, program):
         self.program = program
+        self.published = program_snapshot(program, CONTEXT) if program.model_job_id else None
         self.saved = None
         self.completed = True
 
     async def get(self, org_id, program_id):
         return self.program if program_id == self.program.id and org_id == ORG else None
+
+    async def publication(self, org_id, program_id, revision=None):
+        if self.published is None:
+            return None
+        return JOB, self.published
 
     async def dataset_context(self, org_id, dataset_id):
         return CONTEXT
@@ -175,8 +182,8 @@ class FakePrograms:
         self.saved = draft
         return draft.revision + 1
 
-    async def delete(self, org_id, program_id):
-        return [uuid4()]
+    async def archive(self, org_id, program_id):
+        self.archived = (org_id, program_id)
 
 
 class FakeRuns:
@@ -267,6 +274,22 @@ def test_inspect_logs_result_with_photo_and_asks_for_uncertain_detections():
     assert service.runs.runs[result.id].zone_results[0]["name"] == "Left terminals"
 
 
+def test_draft_test_never_logs_and_live_inspection_uses_the_published_rules():
+    item = program()
+    service, _ = run_service(item, good_board())
+    service.programs.program = replace(item, name="Draft", confidence=0.95, revision=4)
+    draft = run(service.inspect(OPERATOR, USER, item.id, JPEG, draft_revision=4))
+    assert draft.program_name == "Draft"
+    assert draft.created_at is None
+    assert service.runs.runs == {}
+    assert service.images.stored == {}
+
+    live = run(service.inspect(OPERATOR, USER, item.id, JPEG))
+    assert live.program_name == item.name
+    assert live.confidence == item.confidence
+    assert live.program_snapshot["revision"] == item.revision
+
+
 def test_review_result_starts_in_queue():
     item = program()
     service, _ = run_service(item, [*good_board(), det("bolt_ok", 0.15, confidence=0.4)])
@@ -277,7 +300,7 @@ def test_inspect_requires_model_and_inspector_role():
     item = program(model_job_id=None)
     service, _ = run_service(item, [])
     with pytest.raises(InvalidInput):
-        run(service.inspect(OPERATOR, USER, item.id, JPEG))
+        run(service.inspect(OPERATOR, USER, item.id, JPEG, draft_revision=item.revision))
     with pytest.raises(PermissionDenied):
         run(service.inspect(VIEWER, USER, item.id, JPEG))
 
@@ -305,7 +328,7 @@ def test_review_unknown_run_is_not_found():
 def test_save_checks_classes_and_model():
     item = program()
     repo = FakePrograms(item)
-    service = ProgramService(repo, FakeFiles(), FakePreview([]), FakeImages())
+    service = ProgramService(repo, FakeFiles(), FakePreview([]))
     draft = ProgramDraft("Board A", JOB, 0.5, 0.15, 3, [LEFT])
     assert run(service.save(OPERATOR, item.id, draft)) == 4
     repo.completed = False
@@ -316,18 +339,23 @@ def test_save_checks_classes_and_model():
 def test_capture_golden_uses_saved_zones():
     item = program()
     service = ProgramService(
-        FakePrograms(item), FakeFiles(), FakePreview(good_board()), FakeImages()
+        FakePrograms(item), FakeFiles(), FakePreview(good_board())
     )
     layout = run(service.capture_golden(OPERATOR, item.id, JPEG))
     assert layout.expected[RIGHT.id] == {"switch_on": 1}
 
 
-def test_delete_removes_run_photos():
+def test_delete_archives_program_and_keeps_run_photos():
     item = program()
-    images = FakeImages()
-    service = ProgramService(FakePrograms(item), FakeFiles(), FakePreview([]), images)
-    run(service.delete(OPERATOR, item.id))
-    assert len(images.removed) == 1
+    service, _ = run_service(item, good_board())
+    result = run(service.inspect(OPERATOR, USER, item.id, JPEG))
+    programs = ProgramService(service.programs, service.files, service.previews)
+    run(programs.delete(OPERATOR, item.id))
+    assert service.programs.archived == (ORG, item.id)
+    assert run(service.image_path(OPERATOR, result.id)) is not None
+    assert service.images.removed == []
+    assert result.program_snapshot["revision"] == item.revision
+    assert result.program_snapshot["zones"][0]["id"] == str(item.zones[0].id)
 
 
 # ---------- HTTP ----------
@@ -337,7 +365,7 @@ def test_delete_removes_run_photos():
 def client():
     item = program()
     service, _ = run_service(item, good_board())
-    programs = ProgramService(service.programs, service.files, service.previews, service.images)
+    programs = ProgramService(service.programs, service.files, service.previews)
     user = CurrentUser(USER, "Op", "op@example.test", [OPERATOR])
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_run_service] = lambda: service

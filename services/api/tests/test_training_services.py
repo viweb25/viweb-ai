@@ -83,8 +83,8 @@ class FakeDatasets:
         self.saved = (org_id, dataset_id, draft)
         return draft.revision + 1
 
-    async def delete_idle(self, org_id, dataset_id):
-        return [uuid4()]
+    async def archive_idle(self, org_id, dataset_id):
+        self.archived = (org_id, dataset_id)
 
     async def find_photo(self, org_id, dataset_id, photo_id):
         return None
@@ -152,10 +152,13 @@ def test_upload_checks_type_signature_and_digest():
         ))
 
 
-def test_delete_removes_files_after_database_rows():
+def test_delete_archives_dataset_and_keeps_files():
     files = FakeFiles()
-    run(DatasetService(FakeDatasets(), files).delete(OPERATOR, uuid4()))
-    assert len(files.removed[0][2]) == 1
+    datasets = FakeDatasets()
+    dataset_id = uuid4()
+    run(DatasetService(datasets, files).delete(OPERATOR, dataset_id))
+    assert datasets.archived == (OPERATOR.org_id, dataset_id)
+    assert files.removed == []
 
 
 def test_open_and_photo_report_not_found():

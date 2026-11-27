@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 
 from vi_api.app.inspection_programs.program_service import ProgramService
 from vi_api.app.inspection_programs.run_service import RunService
@@ -68,6 +68,40 @@ async def save_program(
     return SavedProgram(revision=await service.save(member, program_id, data.to_draft()))
 
 
+@router.get("/{program_id}/versions")
+async def list_versions(program_id: UUID, member: OrgMember, service: Programs) -> list[int]:
+    return await service.versions(member, program_id)
+
+
+@router.post("/{program_id}/publish", status_code=204)
+async def publish_program(
+    program_id: UUID, revision: Annotated[int, Query(ge=1)], member: OrgMember,
+    service: Programs, _: BrowserOrigin,
+) -> Response:
+    await service.publish(member, program_id, revision)
+    return Response(status_code=204)
+
+
+@router.post("/{program_id}/rollback", status_code=204)
+async def rollback_program(
+    program_id: UUID, revision: Annotated[int, Query(ge=1)], member: OrgMember,
+    service: Programs, _: BrowserOrigin,
+) -> Response:
+    await service.rollback(member, program_id, revision)
+    return Response(status_code=204)
+
+
+@router.post("/{program_id}/test", openapi_extra=JPEG_BODY)
+async def test_draft(
+    program_id: UUID, revision: Annotated[int, Query(ge=1)], request: Request,
+    member: OrgMember, user: CurrentUserDependency, service: Runs, _: BrowserOrigin,
+) -> RunResponse:
+    image = await read_jpeg(request)
+    return RunResponse.build(
+        await service.inspect(member, user.id, program_id, image, draft_revision=revision)
+    )
+
+
 @router.delete("/{program_id}", status_code=204)
 async def delete_program(
     program_id: UUID, member: OrgMember, service: Programs, _: BrowserOrigin
@@ -93,7 +127,10 @@ async def inspect_board(
     user: CurrentUserDependency,
     service: Runs,
     _: BrowserOrigin,
+    revision: Annotated[int | None, Query(ge=1)] = None,
 ) -> RunResponse:
     """Inspect one board photo: detect, compare with the golden layout, log the result."""
     image = await read_jpeg(request)
-    return RunResponse.build(await service.inspect(member, user.id, program_id, image))
+    return RunResponse.build(
+        await service.inspect(member, user.id, program_id, image, expected_revision=revision)
+    )

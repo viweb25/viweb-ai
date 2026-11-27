@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from vi_api.domain.errors import InvalidInput, NotFound
+from vi_api.domain.errors import Conflict, InvalidInput, NotFound, PermissionDenied
 from vi_api.domain.identity.models import Membership
 from vi_api.domain.inspection_programs import policies
 from vi_api.domain.inspection_programs.models import (
@@ -10,8 +10,9 @@ from vi_api.domain.inspection_programs.models import (
     Program,
     ProgramDraft,
     ProgramSummary,
+    program_snapshot,
 )
-from vi_api.domain.inspection_programs.ports import ProgramRepository, RunImageStore
+from vi_api.domain.inspection_programs.ports import ProgramRepository
 from vi_api.domain.training.ports import TrainedModelPreview, TrainingFileStore
 
 PROGRAM_NOT_FOUND = "Inspection program not found"
@@ -25,12 +26,10 @@ class ProgramService:
         programs: ProgramRepository,
         files: TrainingFileStore,
         previews: TrainedModelPreview,
-        images: RunImageStore,
     ):
         self.programs = programs
         self.files = files
         self.previews = previews
-        self.images = images
 
     async def list_programs(self, member: Membership) -> list[ProgramSummary]:
         return await self.programs.list_for_org(member.org_id)
@@ -71,10 +70,49 @@ class ProgramService:
             await self._require_model(member, program.dataset_id, draft.model_job_id)
         return await self.programs.save(member.org_id, program_id, draft)
 
+    async def versions(self, member: Membership, program_id: UUID) -> list[int]:
+        await self.get(member, program_id)
+        return await self.programs.versions(member.org_id, program_id)
+
+    async def publish(self, member: Membership, program_id: UUID, revision: int) -> None:
+        self._require_publisher(member)
+        program, context = await self.open(member, program_id)
+        if program.revision != revision:
+            raise Conflict("Reopen the latest draft before publishing.", "stale_revision")
+        if program.model_job_id is None or not any(zone.expected for zone in program.zones):
+            raise InvalidInput("Choose a model and set expected counts before publishing.")
+        policies.check_draft(
+            ProgramDraft(
+                program.name, program.model_job_id, program.confidence, program.review_margin,
+                program.revision, program.zones,
+            ),
+            context.classes,
+        )
+        await self._require_model(member, program.dataset_id, program.model_job_id)
+        await self.programs.activate(
+            member.org_id, program_id, revision, program.model_job_id,
+            program_snapshot(program, context),
+        )
+
+    async def rollback(self, member: Membership, program_id: UUID, revision: int) -> None:
+        self._require_publisher(member)
+        program = await self.get(member, program_id)
+        published = await self.programs.publication(member.org_id, program_id, revision)
+        if published is None:
+            raise NotFound("Published revision not found.", "version_not_found")
+        await self._require_model(member, program.dataset_id, published[0])
+        await self.programs.activate(member.org_id, program_id, revision)
+
+    @staticmethod
+    def _require_publisher(member: Membership) -> None:
+        if member.role not in ("owner", "admin"):
+            raise PermissionDenied(
+                "Only workspace owners and admins can publish inspection programs"
+            )
+
     async def delete(self, member: Membership, program_id: UUID) -> None:
         policies.require_editor(member)
-        run_ids = await self.programs.delete(member.org_id, program_id)
-        await self.images.remove(member.org_id, run_ids)
+        await self.programs.archive(member.org_id, program_id)
 
     async def capture_golden(
         self, member: Membership, program_id: UUID, image: bytes

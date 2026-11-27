@@ -1,14 +1,21 @@
 """The inspection result log: list, review, and send photos back for retraining."""
 
-from typing import Annotated, Literal
+import csv
+from collections.abc import AsyncIterator
+from dataclasses import replace
+from datetime import UTC
+from io import StringIO
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import AwareDatetime, BaseModel
 
 from vi_api.app.inspection_programs.run_service import RunService
 from vi_api.container import get_run_service
-from vi_api.domain.inspection_programs.models import RunFilter
+from vi_api.domain.identity.models import Membership
+from vi_api.domain.inspection_programs.models import Decision, ReviewStatus, RunFilter
 from vi_api.interfaces.http.dependencies.identity import (
     BrowserOrigin,
     CurrentUserDependency,
@@ -27,19 +34,94 @@ Runs = Annotated[RunService, Depends(get_run_service)]
 NO_STORE = {"Cache-Control": "no-store"}
 
 
+def result_filters(
+    program_id: UUID | None = None,
+    decision: Decision | None = None,
+    review_status: ReviewStatus | None = None,
+    from_at: AwareDatetime | None = None,
+    until_at: AwareDatetime | None = None,
+) -> RunFilter:
+    if from_at is not None and until_at is not None and from_at >= until_at:
+        raise HTTPException(422, "Choose an end date on or after the start date.")
+    return RunFilter(program_id, decision, review_status, from_at=from_at, until_at=until_at)
+
+
+Filters = Annotated[RunFilter, Depends(result_filters)]
+
+
+class ResultProgram(BaseModel):
+    id: UUID
+    name: str
+
+
+@router.get("/programs")
+async def list_result_programs(
+    member: OrgMember, service: Runs, response: Response,
+) -> list[ResultProgram]:
+    response.headers.update(NO_STORE)
+    return [ResultProgram(id=id_, name=name) for id_, name in await service.program_options(member)]
+
+
 @router.get("")
 async def list_runs(
     member: OrgMember,
     service: Runs,
     response: Response,
-    program_id: UUID | None = None,
-    decision: Literal["PASS", "FAIL", "REVIEW"] | None = None,
-    review_status: Literal["none", "pending", "confirmed", "corrected"] | None = None,
+    filters: Filters,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    before_at: AwareDatetime | None = None,
+    before_id: UUID | None = None,
 ) -> list[RunResponse]:
+    if (before_at is None) != (before_id is None):
+        raise HTTPException(422, "Both cursor fields are required.")
     response.headers.update(NO_STORE)
-    filters = RunFilter(program_id, decision, review_status, limit)
-    return [RunResponse.build(run) for run in await service.list_runs(member, filters)]
+    page = replace(filters, limit=limit, before_at=before_at, before_id=before_id)
+    return [RunResponse.build(run) for run in await service.list_runs(member, page)]
+
+
+def _spreadsheet_text(value: str) -> str:
+    if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
+        return "'" + value
+    return value
+
+
+async def _result_csv(
+    service: RunService, member: Membership, filters: RunFilter,
+) -> AsyncIterator[str]:
+    buffer = StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "Run ID", "Inspected at (UTC)", "Program ID", "Program", "Program revision",
+        "Model job ID", "Decision", "Review status", "Review note", "Reviewed at (UTC)",
+    ])
+    page = replace(filters, limit=200)
+    while True:
+        rows = await service.list_runs(member, page)
+        for run in rows:
+            writer.writerow([
+                run.id, run.created_at.astimezone(UTC).isoformat() if run.created_at else "",
+                run.program_id, _spreadsheet_text(run.program_name),
+                (run.program_snapshot or {}).get("revision", ""), run.model_job_id,
+                run.decision, run.review_status, _spreadsheet_text(run.review_note),
+                run.reviewed_at.astimezone(UTC).isoformat() if run.reviewed_at else "",
+            ])
+        yield buffer.getvalue()
+        if len(rows) < page.limit:
+            return
+        buffer.seek(0)
+        buffer.truncate()
+        page = replace(page, before_at=rows[-1].created_at, before_id=rows[-1].id)
+
+
+@router.get("/export.csv")
+async def export_results(member: OrgMember, service: Runs, filters: Filters) -> StreamingResponse:
+    return StreamingResponse(
+        _result_csv(service, member, filters), media_type="text/csv",
+        headers={
+            **NO_STORE,
+            "Content-Disposition": 'attachment; filename="inspection-results.csv"',
+        },
+    )
 
 
 @router.get("/{run_id}")

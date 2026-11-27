@@ -11,6 +11,7 @@ from vi_api.app.demo_examples.create_demo_example import CreateDemoExample
 from vi_api.app.demo_examples.get_demo_example_image import GetDemoExampleImage
 from vi_api.app.demo_examples.list_demo_examples import ListDemoExamples
 from vi_api.app.health.check_readiness import CheckReadiness
+from vi_api.app.identity.account_links import AccountLinks
 from vi_api.app.identity.sign_in import SignIn
 from vi_api.app.identity.sign_up import SignUp
 from vi_api.app.inspection.inspection_service import InspectionService
@@ -29,7 +30,9 @@ from vi_api.infrastructure.cache.catalogue import CachedCatalogueRepository
 from vi_api.infrastructure.database.readiness import DatabaseReadinessRepository
 from vi_api.infrastructure.database.session import Session, engine
 from vi_api.infrastructure.identity.passwords import ScryptPasswordHasher, ScryptPasswordVerifier
+from vi_api.infrastructure.identity.recovery_mail import SmtpAccountMail
 from vi_api.infrastructure.inference.client import HttpInferenceClient
+from vi_api.infrastructure.repository.account_links import PostgresAccountLinks
 from vi_api.infrastructure.repository.accounts import PostgresAccountRepository
 from vi_api.infrastructure.repository.catalogue import JsonCatalogueRepository
 from vi_api.infrastructure.repository.demo_examples import PostgresDemoExampleRepository
@@ -108,6 +111,13 @@ def get_sign_in(
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 
 
+def get_account_links(settings: SettingsDependency) -> AccountLinks:
+    return AccountLinks(
+        PostgresAccountLinks(Session), get_identity_repository(), ScryptPasswordHasher(),
+        SmtpAccountMail(settings),
+    )
+
+
 def get_sign_up() -> SignUp:
     return SignUp(PostgresAccountRepository(), ScryptPasswordHasher())
 
@@ -149,10 +159,8 @@ def get_run_images(settings: SettingsDependency) -> LocalRunImageStore:
 RunImages = Annotated[LocalRunImageStore, Depends(get_run_images)]
 
 
-def get_program_service(
-    files: TrainingFiles, inference: InferenceClient, images: RunImages
-) -> ProgramService:
-    return ProgramService(PostgresProgramRepository(Session), files, inference, images)
+def get_program_service(files: TrainingFiles, inference: InferenceClient) -> ProgramService:
+    return ProgramService(PostgresProgramRepository(Session), files, inference)
 
 
 def get_run_service(

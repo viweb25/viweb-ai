@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 # The schema revision (viweb-db Alembic head) this API release is written for.
 # Bump it together with each new migration; the API reports "not ready" until it matches.
-REQUIRED_SCHEMA_REVISION = "0011"
+REQUIRED_SCHEMA_REVISION = "0014"
 
 
 class DatabaseReadinessRepository:

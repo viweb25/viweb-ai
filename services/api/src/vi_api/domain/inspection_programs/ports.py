@@ -4,6 +4,7 @@ from uuid import UUID
 
 from vi_api.domain.inspection_programs.models import (
     DatasetContext,
+    JsonObject,
     Program,
     ProgramDraft,
     ProgramSummary,
@@ -25,8 +26,19 @@ class ProgramRepository(Protocol):
     async def save(self, org_id: UUID, program_id: UUID, draft: ProgramDraft) -> int:
         """Replace settings and zones; return the new revision. Raises NotFound or Conflict."""
 
-    async def delete(self, org_id: UUID, program_id: UUID) -> list[UUID]:
-        """Delete the program and its runs; return the deleted run IDs. Raises NotFound."""
+    async def publication(
+        self, org_id: UUID, program_id: UUID, revision: int | None = None
+    ) -> tuple[UUID, JsonObject] | None: ...
+
+    async def versions(self, org_id: UUID, program_id: UUID) -> list[int]: ...
+
+    async def activate(
+        self, org_id: UUID, program_id: UUID, revision: int,
+        model_job_id: UUID | None = None, snapshot: JsonObject | None = None,
+    ) -> None: ...
+
+    async def archive(self, org_id: UUID, program_id: UUID) -> None:
+        """Archive the program. Raises NotFound."""
 
     async def dataset_context(self, org_id: UUID, dataset_id: UUID) -> DatasetContext | None: ...
 
@@ -38,6 +50,8 @@ class RunRepository(Protocol):
         """Store a run and return it with its timestamps."""
 
     async def list_for_org(self, org_id: UUID, filters: RunFilter) -> list[Run]: ...
+
+    async def program_options(self, org_id: UUID) -> list[tuple[UUID, str]]: ...
 
     async def get(self, org_id: UUID, run_id: UUID) -> Run | None: ...
 

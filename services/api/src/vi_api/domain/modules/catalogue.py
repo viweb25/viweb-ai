@@ -42,6 +42,7 @@ MODULES: tuple[Module, ...] = (
             ModuleSection("guide", "Getting started", "help"),
             ModuleSection("projects", "Projects", "grid"),
             ModuleSection("programs", "Inspection programs", "layers"),
+            ModuleSection("operator", "Run inspection", "camera"),
             ModuleSection("results", "Results and review", "flag"),
             ModuleSection("inspect", "Quick check", "inspect"),
         ],

@@ -101,6 +101,7 @@ class ProgramResponse(BaseModel):
     review_margin: float
     revision: int
     updated_at: datetime | None
+    published_revision: int | None = None
     zones: list[ZoneBody]
     classes: list[str]
     defect_classes: list[str]
@@ -116,6 +117,7 @@ class ProgramResponse(BaseModel):
             review_margin=program.review_margin,
             revision=program.revision,
             updated_at=program.updated_at,
+            published_revision=program.published_revision,
             zones=[ZoneBody.from_domain(zone) for zone in program.zones],
             classes=context.classes,
             defect_classes=sorted(context.defect_classes),
@@ -134,6 +136,8 @@ class ProgramSummaryResponse(BaseModel):
     pending_reviews: int
     last_run_at: datetime | None
     updated_at: datetime
+    published_revision: int | None = None
+    published_name: str | None = None
 
     @classmethod
     def build(cls, summary: ProgramSummary) -> "ProgramSummaryResponse":
@@ -198,6 +202,8 @@ class RunResponse(BaseModel):
     review_note: str
     reviewed_at: datetime | None
     sent_to_dataset_at: datetime | None
+    program_snapshot: dict | None = None
+    dataset_archived: bool = False
 
     @classmethod
     def build(cls, run: Run) -> "RunResponse":

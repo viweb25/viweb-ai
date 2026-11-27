@@ -1,6 +1,6 @@
 """Inspection programs: a golden layout split into zones, and the log of inspection runs."""
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -45,6 +45,7 @@ class Program:
     revision: int
     zones: list[Zone]
     updated_at: datetime | None = None
+    published_revision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,8 @@ class ProgramSummary:
     pending_reviews: int
     last_run_at: datetime | None
     updated_at: datetime
+    published_revision: int | None = None
+    published_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,18 @@ class DatasetContext:
     part_name: str
     classes: list[str]
     defect_classes: frozenset[str]
+
+
+def program_snapshot(program: Program, context: DatasetContext) -> JsonObject:
+    return {
+        "revision": program.revision,
+        "name": program.name,
+        "confidence": program.confidence,
+        "review_margin": program.review_margin,
+        "classes": context.classes,
+        "defect_classes": sorted(context.defect_classes),
+        "zones": [dict(asdict(zone), id=str(zone.id)) for zone in program.zones],
+    }
 
 
 @dataclass(frozen=True)
@@ -137,6 +152,8 @@ class Run:
     review_note: str = ""
     reviewed_at: datetime | None = None
     sent_to_dataset_at: datetime | None = None
+    program_snapshot: JsonObject | None = None
+    dataset_archived: bool = False
 
 
 @dataclass(frozen=True)
@@ -145,6 +162,10 @@ class RunFilter:
     decision: Decision | None = None
     review_status: ReviewStatus | None = None
     limit: int = 50
+    from_at: datetime | None = None
+    until_at: datetime | None = None
+    before_at: datetime | None = None
+    before_id: UUID | None = None
 
 
 @dataclass(frozen=True)

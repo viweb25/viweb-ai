@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,3 +11,8 @@ class Settings(BaseSettings):
     training_image_dir: str = Field(default="", validation_alias="VI_TRAINING_IMAGE_DIR")
     training_run_dir: str = Field(default="", validation_alias="VI_TRAINING_RUN_DIR")
     app_origin: str = "http://127.0.0.1:3000"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_from: str = ""
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")

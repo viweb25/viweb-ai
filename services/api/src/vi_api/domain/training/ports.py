@@ -30,8 +30,8 @@ class DatasetRepository(Protocol):
         Raises NotFound or Conflict when the revision is stale.
         """
 
-    async def delete_idle(self, org_id: UUID, dataset_id: UUID) -> list[UUID]:
-        """Delete a dataset without active jobs and return the deleted job IDs."""
+    async def archive_idle(self, org_id: UUID, dataset_id: UUID) -> None:
+        """Archive a dataset without active jobs."""
 
     async def find_photo(
         self, org_id: UUID, dataset_id: UUID, photo_id: UUID
