@@ -8,6 +8,9 @@ from vi_api.interfaces.http.controllers.catalogue import router as catalogue_rou
 from vi_api.interfaces.http.controllers.demo_examples import router as demo_examples_router
 from vi_api.interfaces.http.controllers.health import router as health_router
 from vi_api.interfaces.http.controllers.inspection import router as inspection_router
+from vi_api.interfaces.http.controllers.inspection_programs import router as programs_router
+from vi_api.interfaces.http.controllers.inspection_runs import router as runs_router
+from vi_api.interfaces.http.controllers.modules import router as modules_router
 from vi_api.interfaces.http.controllers.training_datasets import router as training_datasets_router
 from vi_api.interfaces.http.controllers.training_jobs import router as training_jobs_router
 from vi_api.interfaces.http.controllers.workspaces import router as workspaces_router
@@ -32,6 +35,9 @@ for router in (
     training_datasets_router,
     training_jobs_router,
     workspaces_router,
+    modules_router,
+    programs_router,
+    runs_router,
 ):
     app.include_router(router)
 

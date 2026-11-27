@@ -23,7 +23,7 @@ class PostgresTrainingJobRepository:
             result = await session.execute(
                 text("""
                     SELECT part_name, revision, classes FROM training_datasets
-                    WHERE id = :id AND org_id = :org FOR UPDATE
+                    WHERE id = :id AND org_id = :org AND archived_at IS NULL FOR UPDATE
                 """),
                 ids,
             )
@@ -74,7 +74,7 @@ class PostgresTrainingJobRepository:
                     UPDATE training_jobs j SET status = 'cancelled', finished_at = now()
                     FROM training_datasets d
                     WHERE j.id = :job AND j.dataset_id = d.id AND d.id = :id AND d.org_id = :org
-                        AND j.status IN ('queued', 'running')
+                        AND d.archived_at IS NULL AND j.status IN ('queued', 'running')
                     RETURNING j.id
                 """),
                 {"job": job_id, "id": dataset_id, "org": org_id},
@@ -87,7 +87,7 @@ class PostgresTrainingJobRepository:
                 text(f"""
                     SELECT {JOB_COLUMNS}, j.snapshot -> 'options' AS options
                     FROM training_jobs j JOIN training_datasets d ON d.id = j.dataset_id
-                    WHERE d.id = :id AND d.org_id = :org
+                    WHERE d.id = :id AND d.org_id = :org AND d.archived_at IS NULL
                     ORDER BY j.created_at DESC, j.id DESC LIMIT 1
                 """),
                 {"id": dataset_id, "org": org_id},
@@ -101,7 +101,8 @@ class PostgresTrainingJobRepository:
                 text(f"""
                     SELECT {JOB_COLUMNS}, j.snapshot
                     FROM training_jobs j JOIN training_datasets d ON d.id = j.dataset_id
-                    WHERE d.id = :id AND d.org_id = :org AND j.status = 'succeeded'
+                    WHERE d.id = :id AND d.org_id = :org AND d.archived_at IS NULL
+                      AND j.status = 'succeeded'
                     ORDER BY j.created_at DESC, j.id DESC
                 """),
                 {"id": dataset_id, "org": org_id},
@@ -117,7 +118,8 @@ class PostgresTrainingJobRepository:
                     SELECT j.snapshot FROM training_jobs j
                     JOIN training_datasets d ON d.id = j.dataset_id
                     WHERE j.id = :job AND d.id = :id AND d.org_id = :org
-                        AND j.status = 'succeeded'
+                        AND d.archived_at IS NULL
+                      AND j.status = 'succeeded'
                 """),
                 {"job": job_id, "id": dataset_id, "org": org_id},
             )

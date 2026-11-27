@@ -34,7 +34,7 @@ class PostgresDatasetRepository:
                             WHERE j.dataset_id = d.id AND j.status = 'succeeded') AS model_count,
                         (SELECT j.status FROM training_jobs j WHERE j.dataset_id = d.id
                             ORDER BY j.created_at DESC, j.id DESC LIMIT 1) AS latest_status
-                    FROM training_datasets d WHERE d.org_id = :org_id
+                    FROM training_datasets d WHERE d.org_id = :org_id AND d.archived_at IS NULL
                     ORDER BY d.updated_at DESC, d.id
                 """),
                 {"org_id": org_id},
@@ -81,7 +81,7 @@ class PostgresDatasetRepository:
                     classes = COALESCE(CAST(:classes AS jsonb), classes),
                     class_info = COALESCE(CAST(:class_info AS jsonb), class_info),
                     revision = revision + 1, updated_at = now()
-                WHERE id = :id AND org_id = :org_id AND revision = :revision
+                WHERE id = :id AND org_id = :org_id AND archived_at IS NULL AND revision = :revision
                 RETURNING revision
             """
         async with self.sessions.begin() as session:
@@ -120,7 +120,7 @@ class PostgresDatasetRepository:
                 )
         return revision
 
-    async def delete_idle(self, org_id: UUID, dataset_id: UUID) -> list[UUID]:
+    async def archive_idle(self, org_id: UUID, dataset_id: UUID) -> None:
         async with self.sessions.begin() as session:
             dataset = await session.scalar(
                 text("""
@@ -139,17 +139,15 @@ class PostgresDatasetRepository:
             )
             if active:
                 raise Conflict(
-                    "Stop the running training before deleting this project.", "training_active"
+                    "Stop the running training before archiving this project.", "training_active"
                 )
-            jobs = await session.scalars(
-                text("DELETE FROM training_jobs WHERE dataset_id = :id RETURNING id"),
+            await session.execute(
+                text("""
+                    UPDATE training_datasets SET archived_at = COALESCE(archived_at, now())
+                    WHERE id = :id
+                """),
                 {"id": dataset_id},
             )
-            job_ids = list(jobs)
-            await session.execute(
-                text("DELETE FROM training_datasets WHERE id = :id"), {"id": dataset_id}
-            )
-        return job_ids
 
     async def find_photo(
         self, org_id: UUID, dataset_id: UUID, photo_id: UUID
@@ -159,7 +157,8 @@ class PostgresDatasetRepository:
                 text("""
                     SELECT p.id, p.digest, p.media_type FROM training_photos p
                     JOIN training_datasets d ON d.id = p.dataset_id
-                    WHERE d.org_id = :org_id AND d.id = :dataset_id AND p.id = :photo_id
+                    WHERE d.org_id = :org_id AND d.archived_at IS NULL
+                      AND d.id = :dataset_id AND p.id = :photo_id
                 """),
                 {"org_id": org_id, "dataset_id": dataset_id, "photo_id": photo_id},
             )
@@ -171,7 +170,7 @@ class PostgresDatasetRepository:
         row = await session.execute(
             text("""
                 SELECT id, part_name, inspection_note, revision, classes, class_info
-                FROM training_datasets WHERE id = :id AND org_id = :org_id
+                FROM training_datasets WHERE id = :id AND org_id = :org_id AND archived_at IS NULL
             """),
             {"id": dataset_id, "org_id": org_id},
         )

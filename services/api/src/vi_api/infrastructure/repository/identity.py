@@ -62,6 +62,7 @@ class PostgresIdentityRepository:
                         SELECT 1 FROM identity.memberships AS m
                         WHERE m.user_id = u.id AND m.status = 'active'
                       )
+                    FOR SHARE OF c
                     RETURNING id
                 """),
                 {"user_id": user_id, "expected_hash": expected_hash, "token_hash": token_hash},
